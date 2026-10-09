@@ -1,8 +1,9 @@
 /* =================================================================== the welcome
-   The first time Umbra opens (and whenever you ask: ⌘K › Welcome to Umbra): an eclipse, a few lines on what
-   Umbra is, then AI, off unless you choose it, with its provider's terms to agree to. Calm from the first
-   frame: it covers Gmail while Gmail loads underneath, and when you're done the light comes back and your
-   inbox is there. Nothing here is required: Skip (or Esc on the first page) leaves everything as it was. */
+   The first time Umbra opens (and whenever you ask: ⌘K › Welcome to Umbra): an eclipse, what Umbra does, how
+   it looks, AI (off unless you choose it, with its provider's terms to agree to), and how to use it. Calm from
+   the first frame: it covers Gmail while Gmail loads underneath, and when you're done the light comes back and
+   your inbox is there. Choices are words, not boxes. Nothing here is required: Skip (or Esc on the first page)
+   leaves everything as it was. */
 let introOn = false;
 const introHere = () => /^\/mail\//.test(location.pathname) && !/[?&](view|ui|ik)=/.test(location.search);
 const introDue = () => store.get("welcomed", false) === false && introHere();
@@ -21,21 +22,26 @@ function intro(replay) {
   try { sky = makeEclipse(canvas, { start: { x: 0.5, y: wide() ? 0.36 : 0.3, size: wide() ? 0.075 : 0.06, c: still ? 0 : -0.4, fade: still ? 1 : 0 } }); } catch (e) { sky = null; }
   if (!sky) root.classList.add("qm-i-flat");
 
-  // where the eclipse sits on each page
-  const place = (n) => (n === 0 ? { x: 0.5, y: wide() ? 0.36 : 0.3, size: wide() ? 0.075 : 0.06 } : wide() ? { x: 0.74, y: 0.36, size: 0.06 } : { x: 0.5, y: 0.17, size: 0.05 });
+  // where the eclipse sits on each page (on the look page, the welcome steps aside: the sun goes with it)
+  const place = (n) => (n === 0 ? { x: 0.5, y: wide() ? 0.36 : 0.3, size: wide() ? 0.075 : 0.06 }
+    : n === 2 && split ? { x: 0.38, y: 0.14, size: 0.035 }
+    : wide() ? { x: 0.74, y: 0.36, size: 0.06 } : { x: 0.5, y: 0.17, size: 0.05 });
   const pick = { tides: cp().tides && cp().tides !== "custom" ? cp().tides : "off", ai: "", agreed: false, ready: false };
-  const pill = (label, on, click, extra) => h("button", Object.assign({ type: "button", class: "qm-i-pill", "aria-pressed": String(!!on), onclick: click }, extra || {}), label);
+  // a choice is a word: the chosen one bright, with a dot; the others quieter (a little more said after it, if needed)
+  const opt = (label, on, click, more) => h("button", { type: "button", class: "qm-i-opt", "aria-pressed": String(!!on), onclick: click }, h("span", { text: label }), more ? h("small", { text: more }) : null);
+  const next = (label, onclick) => h("button", { type: "button", class: "qm-i-next", onclick }, label);
+  const back = (n) => h("button", { type: "button", class: "qm-i-back", onclick: () => go(n) }, "Back");
 
   /* ---- page 0: the eclipse, and the name */
-  const begin = h("button", { type: "button", class: "qm-i-btn qm-i-main qm-i-go", "data-in": "", onclick: () => go(1) }, "Begin");
+  const begin = h("button", { type: "button", class: "qm-i-next qm-i-go", "data-in": "", onclick: () => go(1) }, "Begin");
   const title = h("section", { class: "qm-i-step qm-i-title" },
     h("h1", { "data-in": "" }, "Umbra"),
     h("p", { class: "qm-i-tag", "data-in": "" }, "A calmer Gmail."),
     begin);
 
   /* ---- page 1: what Umbra is (and the one choice that changes how mail reaches you) */
-  const tideSeg = h("div", { class: "qm-i-pills", role: "group", "aria-label": "New mail" });
-  const drawTides = () => tideSeg.replaceChildren(...[["As it comes", "off"], ["Twice a day", "two"], ["Three times", "three"]].map(([l, v]) => pill(l, pick.tides === v, () => { pick.tides = v; drawTides(); })));
+  const tideSeg = h("div", { class: "qm-i-opts", role: "group", "aria-label": "New mail" });
+  const drawTides = () => tideSeg.replaceChildren(...[["As it comes", "off"], ["Twice a day", "two"], ["Three times a day", "three"]].map(([l, v]) => opt(l, pick.tides === v, () => { pick.tides = v; drawTides(); })));
   drawTides();
   const what = h("section", { class: "qm-i-step qm-i-page" },
     h("h2", { "data-in": "" }, "What Umbra does"),
@@ -44,34 +50,59 @@ function intro(replay) {
       h("li", { "data-in": "" }, "Can bring new mail a few times a day, all at once."),
       h("li", { "data-in": "" }, "Keeps everything on your computer. No server, no tracking.")),
     h("div", { class: "qm-i-choice", "data-in": "" }, h("span", { class: "qm-i-label", text: "New mail" }), tideSeg),
-    h("div", { class: "qm-i-actions", "data-in": "" },
-      h("button", { type: "button", class: "qm-i-btn qm-i-main", onclick: () => go(2) }, "Continue"),
-      h("button", { type: "button", class: "qm-i-btn qm-i-ghost", onclick: () => go(0) }, "Back")));
+    h("div", { class: "qm-i-actions", "data-in": "" }, next("Continue", () => go(2)), back(0)));
 
-  /* ---- page 2: AI, optional */
-  const aiPills = h("div", { class: "qm-i-pills", role: "group", "aria-label": "AI" });
+  /* ---- page 2: how it looks (applied at once: once Gmail is ready, the welcome steps aside to show it) */
+  const was = { theme: prefs.theme, soft: !!prefs.soft, bg: prefs.bg };
+  const look = { theme: prefs.theme || "dark", soft: !!prefs.soft, bg: (prefs.bg || {}).kind || "none" };
+  const applyPick = () => {
+    prefs.theme = look.theme;
+    prefs.soft = look.soft;
+    prefs.bg = Object.assign({}, prefs.bg || {}, { kind: look.bg });
+    applyLook();
+  };
+  // (a picture or a color you already have is one of the choices, so it's never lost here)
+  const bgChoices = [["Plain", "none"], ["Sky", "sky", "follows the time of day"]];
+  if (store.get("bg-img", "") || look.bg === "image") bgChoices.push(["Your picture", "image"]);
+  if (look.bg === "color") bgChoices.push(["Your color", "color"]);
+  const lookRow = (label, options, key) => {
+    const g = h("div", { class: "qm-i-opts", role: "group", "aria-label": label });
+    const draw = () => g.replaceChildren(...options.map(([l, v, more]) => opt(l, look[key] === v, () => { look[key] = v; applyPick(); draw(); }, more)));
+    draw();
+    return h("div", { class: "qm-i-choice", "data-in": "" }, h("span", { class: "qm-i-label", text: label }), g);
+  };
+  const looks = h("section", { class: "qm-i-step qm-i-page" },
+    h("h2", { "data-in": "" }, "How it looks"),
+    lookRow("Theme", [["Dark", "dark"], ["Light", "light"], [IS_MAC ? "Match my Mac" : "Match my computer", "system"]], "theme"),
+    lookRow("Style", [["Flat", false], ["Soft", true, "raised, with soft shadows"]], "soft"),
+    lookRow("Background", bgChoices, "bg"),
+    h("p", { class: "qm-i-note", "data-in": "" }, "More in Settings › Look: your own picture, colors, fonts, spacing."),
+    h("div", { class: "qm-i-actions", "data-in": "" }, next("Continue", () => go(3)), back(1)));
+
+  /* ---- page 3: AI, optional (No AI unless you choose one) */
+  const aiPills = h("div", { class: "qm-i-opts qm-i-col", role: "group", "aria-label": "AI" });
   const detail = h("div", { class: "qm-i-detail" });
   const agree = h("input", { type: "checkbox" });
   const agreeText = h("span", {});
   const agreeRow = h("label", { class: "qm-i-agree", hidden: true }, agree, agreeText);
-  const finishBtn = h("button", { type: "button", class: "qm-i-btn qm-i-main", onclick: () => finish() }, "Open my inbox");
+  const aiNext = next("Continue", () => go(4));
   const aiNote = h("p", { class: "qm-i-note", role: "status" });
   let chromeState = "missing";
   daiChromeState().then((x) => { chromeState = x; drawAI(); }).catch(() => {});
-  const NAMES = [["No AI", "off"], ["ChatGPT", "chatgpt"], ["Gemini", "gemini"], ["Claude", "anthropic"], ["OpenAI", "openai"], ["On this computer", "chrome"]];
-  const KEYS = { gemini: ["Gemini API key", "https://aistudio.google.com/apikey", "Get a free key"], openai: ["OpenAI API key", "https://platform.openai.com/api-keys", "Get a key"], anthropic: ["Anthropic API key", "https://console.anthropic.com/settings/keys", "Get a key"] };
+  const NAMES = [["No AI", "off", "Umbra does everything else without it"], ["ChatGPT", "chatgpt", "your Plus or Pro plan"], ["Gemini", "gemini", "your own key, free to get"],
+    ["Claude", "anthropic", "your own Anthropic key"], ["OpenAI", "openai", "your own API key"], ["On this computer", "chrome", "Chrome's built-in model"]];
+  const KEY_LINKS = { gemini: ["Gemini API key", "https://aistudio.google.com/apikey", "Get a free key"], openai: ["OpenAI API key", "https://platform.openai.com/api-keys", "Get a key"], anthropic: ["Anthropic API key", "https://console.anthropic.com/settings/keys", "Get a key"] };
   const sayAI = (t, kind) => { aiNote.textContent = t || ""; aiNote.className = "qm-i-note" + (kind ? " qm-i-" + kind : ""); };
   const sync = () => {
     const p = pick.ai;
     agreeRow.hidden = p === "off";
-    finishBtn.textContent = p === "off" ? "Open my inbox" : "Turn on AI";
-    finishBtn.disabled = p !== "off" && !(pick.ready && agree.checked);
+    aiNext.disabled = p !== "off" && !(pick.ready && agree.checked);
   };
   agree.addEventListener("change", () => { pick.agreed = agree.checked; sync(); });
   function drawAI() {
     const p = pick.ai;
     aiPills.replaceChildren(...NAMES.filter(([, v]) => v !== "chrome" || (chromeState !== "missing" && chromeState !== "unavailable"))
-      .map(([l, v]) => pill(l, p === v, () => choose(v, true))));
+      .map(([l, v, more]) => opt(l, p === v, () => choose(v, true), more)));
     const t = AI_TERMS[p];
     agreeText.replaceChildren("I agree to ", t ? h("a", { href: t[1], target: "_blank", rel: "noopener", text: t[0].replace(/^The /, "the ") }) : "the provider's terms", ". Umbra collects zero data.");
     sync();
@@ -85,7 +116,7 @@ function intro(replay) {
     sayAI("");
     detail.replaceChildren();
     drawAI();
-    if (p === "off") { detail.append(h("p", { class: "qm-i-note", text: "Umbra does everything else without it. You can turn it on any time in Settings." })); return; }
+    if (p === "off") { detail.append(h("p", { class: "qm-i-note", text: "You can turn it on any time in Settings › AI." })); return; }
     // what each one needs: a sign-in, a key, or nothing at all
     if (p === "chatgpt") {
       detail.append(signInBox({ onDone: (x) => { pick.ready = !!(x.chatgpt && x.chatgpt.signedIn && x.chatgpt.planUsage); sync(); } }),
@@ -97,8 +128,8 @@ function intro(replay) {
           detail.replaceChildren(h("p", { class: "qm-i-note qm-i-ok", text: "Signed in" + (st.chatgpt.email ? " as " + st.chatgpt.email : "") + "." }));
         }
       } catch (e) { /* the box says what to do */ }
-    } else if (KEYS[p]) {
-      const k = KEYS[p];
+    } else if (KEY_LINKS[p]) {
+      const k = KEY_LINKS[p];
       const field = h("input", { type: "password", class: "qm-i-field", placeholder: k[0], autocomplete: "off", spellcheck: "false", "aria-label": k[0] });
       let checking = false;
       const check = async () => {
@@ -144,18 +175,29 @@ function intro(replay) {
     h("div", { "data-in": "" }, aiPills),
     h("div", { "data-in": "" }, detail),
     h("div", { "data-in": "" }, agreeRow, aiNote),
-    h("div", { class: "qm-i-actions", "data-in": "" }, finishBtn, h("button", { type: "button", class: "qm-i-btn qm-i-ghost", onclick: () => go(1) }, "Back")));
-  // someone coming back to it: what they have now
-  if (replay && aiOn()) {
-    helper("/status", null, 8000).then((st) => { if (st && st.provider && st.provider !== "off") choose(st.provider); }).catch(() => {});
-  }
+    h("div", { class: "qm-i-actions", "data-in": "" }, aiNext, back(2)));
   drawAI();
   choose("off");
 
-  const dots = h("div", { class: "qm-i-dots", "aria-hidden": "true" }, h("i"), h("i"), h("i"));
+  /* ---- page 4: how to use it (with your own keys, if you changed them) */
+  const k = (id) => keyLabel(keyFor(id));
+  const guide = h("section", { class: "qm-i-step qm-i-page" },
+    h("h2", { "data-in": "" }, "How to use it"),
+    h("dl", { class: "qm-i-keys" },
+      ...[[k("palette"), "Search, open, or do almost anything."],
+        [k("done"), "Done: the email leaves your inbox."],
+        [k("reply"), "Reply."],
+        [k("find"), "Find."],
+        [k("menu"), "The menu, also at the top left: folders, the paper and files."],
+        [k("keys"), "Every shortcut."]].map(([key, what]) => h("div", { "data-in": "" }, h("dt", { text: key }), h("dd", { text: what })))),
+    h("div", { class: "qm-i-actions", "data-in": "" }, next("Open my inbox", () => finish()), back(3)));
+
+  const dots = h("div", { class: "qm-i-dots", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("i"), h("i"));
   const skip = h("button", { type: "button", class: "qm-i-skip", onclick: () => finish(true) }, replay ? "Close" : "Skip");
   const waitLine = h("p", { class: "qm-i-wait", "aria-live": "polite" });
-  const pages = [title, what, aiPage];
+  const pages = [title, what, looks, aiPage, guide];
+  // (while the welcome steps aside on the look page, the mail beside it can't be clicked)
+  const shield = h("div", { class: "qm-i-shield", "aria-hidden": "true" });
   root.append(...pages, dots, skip, waitLine);
   (document.body || ROOT).appendChild(root);
 
@@ -167,8 +209,9 @@ function intro(replay) {
     if (t && t.closest && (t.closest("button, a, input, .qm-signin") && root.contains(t))) return; // (their own Enter)
     e.preventDefault();
     if (page === 0) { if (shown) go(1); else hurry(); }
-    else if (page === 1) go(2);
-    else if (!finishBtn.disabled) finish();
+    else if (page === 3) { if (!aiNext.disabled) go(4); }
+    else if (page === 4) finish();
+    else go(page + 1);
   };
   root.addEventListener("keydown", (e) => { onKey(e); e.stopPropagation(); });
   for (const type of ["keyup", "keypress"]) root.addEventListener(type, (e) => e.stopPropagation());
@@ -187,13 +230,13 @@ function intro(replay) {
     if (!introOn || root.contains(e.target)) return;
     if (Date.now() - pullsAt > 1000) { pulls = 0; pullsAt = Date.now(); }
     if (++pulls > 20) return; // (never a tug of war)
-    const to = lastFocus && root.contains(lastFocus) && lastFocus.getClientRects().length ? lastFocus : root.querySelector(".qm-i-on .qm-i-main:not([disabled]), .qm-i-on button, .qm-i-on input") || root;
+    const to = lastFocus && root.contains(lastFocus) && lastFocus.getClientRects().length ? lastFocus : root.querySelector(".qm-i-on .qm-i-next:not([disabled]), .qm-i-on button, .qm-i-on input") || root;
     to.focus({ preventScroll: true });
   };
   document.addEventListener("focusin", trap, true);
 
   /* ---- motion: what arrives settles in, a little at a time; what leaves just goes */
-  let page = -1, shown = false;
+  let page = -1, shown = false, split = false;
   const enter = (sec, delay) => {
     sec.classList.add("qm-i-on");
     [...sec.querySelectorAll("[data-in]")].forEach((el, i) => {
@@ -205,13 +248,18 @@ function intro(replay) {
     afterAnim(a, () => { if (pages[page] !== sec) sec.classList.remove("qm-i-on"); if (a) a.cancel(); });
   };
   function go(n) {
-    if (n === page || n < 0 || n > 2) return;
-    if (page >= 0) leave(pages[page]);
+    if (n === page || n < 0 || n >= pages.length) return;
+    const old = page;
     page = n;
+    if (old >= 0) leave(pages[old]);
+    // the look page: once Gmail (and Umbra on it) is there, the welcome narrows to the left and your inbox shows beside it
+    split = n === 2 && wide() && !!(screen && screen.kind);
+    root.classList.toggle("qm-i-split", split);
+    if (split) document.body.appendChild(shield); else shield.remove();
     if (sky) sky.to(Object.assign(place(n), { dim: n === 0 ? 0 : 0.12 }), still ? 1 : 1300, "inOut");
     enter(pages[n], page === 0 ? 0 : 220);
     [...dots.children].forEach((d, i) => d.classList.toggle("qm-i-cur", i === n));
-    setTimeout(() => { const f = pages[n].querySelector(n === 2 ? ".qm-i-pill[aria-pressed=true]" : ".qm-i-main"); if (f) f.focus({ preventScroll: true }); }, 380);
+    setTimeout(() => { const f = pages[n].querySelector(n === 3 ? ".qm-i-opt[aria-pressed=true]" : n === 2 ? ".qm-i-opt[aria-pressed=true]" : ".qm-i-next"); if (f) f.focus({ preventScroll: true }); }, 380);
   }
   // the opening: the moon takes the last of the sun, the ring, then the corona, then the name
   const showTitle = () => {
@@ -239,7 +287,12 @@ function intro(replay) {
   async function finish(skipped) {
     if (leaving) return;
     leaving = true;
-    if (!skipped) {
+    shield.remove();
+    root.classList.remove("qm-i-split");
+    // (skipped: the look goes back to how it was)
+    if (skipped) { prefs.theme = was.theme; prefs.soft = was.soft; prefs.bg = was.bg; applyLook(); }
+    else {
+      applyPick();
       prefs.calm = Object.assign({}, prefs.calm, { tides: pick.tides });
       if (pick.tides !== "off") tidesStart();
       const p = pick.ai;
