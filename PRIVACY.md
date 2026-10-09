@@ -71,6 +71,8 @@ Umbra sends data to these places, and only these.
 
 **Logos and photos.** A row from a company shows that company's logo. Umbra asks Google's public icon service (`t1.gstatic.com`) for the icon of the sender's web domain, such as `example.com`. Only the domain is in the request, never an email address, and no referrer is sent. People's photos load from the Google addresses Gmail itself uses.
 
+**Video pictures.** When an email links to a YouTube video, Umbra shows the video's picture from YouTube's image server (`i.ytimg.com`). Only the video's ID is in the request, and no referrer is sent.
+
 **The AI provider you choose.** Only if you turn AI on and choose a provider in Settings › AI (or in the welcome, where you also agree to that provider's terms). Requests go straight from your browser to that provider, with your ChatGPT sign-in or your own API key, and without your cookies:
 
 - OpenAI, with Sign in with ChatGPT (`auth.openai.com` to sign in, `api.openai.com` for requests, on your ChatGPT plan)

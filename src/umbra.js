@@ -260,14 +260,14 @@ const go = (hash) => { location.hash = hash; };
 
 // a short note at the bottom; with `act` ({ label, run }) it carries a button (Undo) and stays a little longer,
 // and as long as the pointer rests on it
-function toast(msg, act) {
+function toast(msg, act, stay) {
   let t = document.getElementById("qm-toast");
   if (t) { clearTimeout(t._qmTimer); t.remove(); }
   t = h("div", { id: "qm-toast", role: "status", class: "qm-hasact" }, h("span", { text: msg }),
     act ? h("button", { type: "button", onclick: () => { out(); act.run(); } }, act.label) : null,
     h("button", { type: "button", class: "qm-gx", "aria-label": "Dismiss", title: "Dismiss", onclick: () => out() }, icon("x")));
   const out = () => { clearTimeout(t._qmTimer); if (!t.isConnected) return; t.classList.add("qm-out"); setTimeout(() => t.remove(), 220); };
-  const later = () => { clearTimeout(t._qmTimer); t._qmTimer = setTimeout(out, act ? 6000 : 2400); };
+  const later = () => { clearTimeout(t._qmTimer); if (!stay) t._qmTimer = setTimeout(out, act ? 6000 : 2400); };
   t.addEventListener("pointerenter", () => clearTimeout(t._qmTimer));
   // Gmail's own note is up (mirrored): this one sits just above it rather than on top of it
   const g = document.getElementById("qm-gtoast");
@@ -283,6 +283,8 @@ function toast(msg, act) {
    helper(path, body) is the one way in (its paths are those of the helper app Umbra once had). */
 let ai = { reachable: false, ready: false };
 const IN_EXTENSION = typeof globalThis.UMBRA_EXTENSION !== "undefined";
+// (the extension was updated or turned off under this tab: this copy can't save anything any more, so it says so)
+window.addEventListener("umbra:stale", () => toast("Umbra was updated or turned off in Chrome. Reload Gmail to keep using it.", { label: "Reload", run: () => location.reload() }, true));
 function helper(path, body, timeout = 120000) {
   // (AI off: nothing of your mail goes anywhere, whichever part of Umbra asks, even one that asked before it was turned off;
   // setting up — a key, ChatGPT's sign-in — sends none of it)
@@ -6039,7 +6041,7 @@ function videoCards(m) {
     seen.add(id);
     const words = text(a).trim();
     const title = titles.get(id) || (words && !/^https?:|youtu/i.test(words) && words.length > 3 ? words : "YouTube video");
-    const pic = h("img", { src: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, alt: "", loading: "lazy", draggable: "false" });
+    const pic = h("img", { src: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, alt: "", loading: "lazy", draggable: "false", referrerpolicy: "no-referrer" });
     const card = h("button", { type: "button", class: "qm-video", title: "Play on YouTube", onclick: () => openUrl(url.toString()) },
       h("span", { class: "qm-vthumb" }, pic, h("i", { class: "qm-vplay", "aria-hidden": "true" })),
       h("span", { class: "qm-vinfo" }, h("b", { text: title.slice(0, 120) }), h("small", { text: "YouTube" })));
@@ -8238,7 +8240,8 @@ function signInBox(o) {
   const say = (t, kind) => { note.textContent = t || ""; note.className = "qm-status" + (kind ? " qm-" + kind : ""); };
   const field = h("input", { type: "url", class: "qm-paste", placeholder: "http://127.0.0.1:47824/auth/callback?…", autocomplete: "off", spellcheck: "false", "aria-label": "The address ChatGPT left you on" });
   const paste = h("div", { class: "qm-pastebox", hidden: true }, h("p", { class: "qm-pnote", text: "ChatGPT ends on a page that won't load. That's expected: copy its address and paste it here." }), field);
-  const finish = (x) => { daiSignedIn.delete(heard); say(x.chatgpt && x.chatgpt.planUsage === false ? x.message : "Signed in" + (x.chatgpt && x.chatgpt.email ? " as " + x.chatgpt.email : "") + ".", "ok"); paste.hidden = true; if (o && o.onDone) o.onDone(x); };
+  let done = false;
+  const finish = (x) => { done = true; daiSignedIn.delete(heard); say(x.chatgpt && x.chatgpt.planUsage === false ? x.message : "Signed in" + (x.chatgpt && x.chatgpt.email ? " as " + x.chatgpt.email : "") + ".", "ok"); paste.hidden = true; if (o && o.onDone) o.onDone(x); };
   const heard = (r) => { if (!document.contains(box)) { daiSignedIn.delete(heard); return; } if (r.ok) finish(r.status); else { say(r.message, "err"); btn.disabled = false; } };
   let busy = false;
   const tryPaste = async () => {
@@ -8258,7 +8261,11 @@ function signInBox(o) {
       const res = await helper("/chatgpt/start", {}, 15000);
       daiSignedIn.add(heard);
       openUrl(res.url);
-      if (res.auto) say("Finish in the ChatGPT tab. Umbra notices on its own.");
+      if (res.auto) {
+        say("Finish in the ChatGPT tab. Umbra notices on its own.");
+        // (and if it doesn't: the address that tab ended on does it by hand)
+        setTimeout(() => { if (done || !document.contains(box)) return; paste.firstChild.textContent = "If the ChatGPT tab ended on a page that won't load, copy its address and paste it here."; paste.hidden = false; }, 45000);
+      }
       else { say(""); paste.hidden = false; setTimeout(() => field.focus(), 50); }
     } catch (e) { say(e.message, "err"); }
     btn.disabled = false;

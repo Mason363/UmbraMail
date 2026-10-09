@@ -10,9 +10,13 @@
   if (G.__umbraReady) return; // injected twice: the first one stays in charge
 
   const alive = () => { try { return !!(chrome.runtime && chrome.runtime.id); } catch (e) { return false; } };
+  // (once that link is gone, Umbra is told, once, so it can ask for a reload instead of quietly losing changes)
+  let staleSaid = false;
+  const stale = () => { if (staleSaid) return; staleSaid = true; try { G.dispatchEvent(new Event("umbra:stale")); } catch (e) { /* nothing to tell */ } };
+  if (typeof setInterval === "function") { const watch = setInterval(() => { if (!alive()) { clearInterval(watch); stale(); } }, 20000); }
   const report = (e) => { try { console.error("Umbra Mail:", e); } catch (x) { /* nothing to tell */ } };
   const call = (fn, self, ...args) => { if (typeof fn === "function") try { fn.apply(self, args); } catch (e) { report(e); } };
-  const send = (msg) => { try { return alive() ? chrome.runtime.sendMessage(msg) : Promise.reject(new Error("Umbra Mail was updated: reload Gmail")); } catch (e) { return Promise.reject(e); } };
+  const send = (msg) => { try { if (alive()) return chrome.runtime.sendMessage(msg); stale(); return Promise.reject(new Error("Umbra Mail was updated: reload Gmail")); } catch (e) { return Promise.reject(e); } };
   const TAB = (G.crypto && typeof crypto.randomUUID === "function") ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
 
   /* =================================================================== values
@@ -46,6 +50,7 @@
     }
     dirty.clear();
     const failed = (e) => { for (const [k, m] of inflight) if (m === n) inflight.delete(k); if (e) report(e); };
+    if (!readOnly && !alive()) stale();
     if (readOnly || !alive()) return failed();
     try {
       chrome.storage.local.set(put).catch(failed);

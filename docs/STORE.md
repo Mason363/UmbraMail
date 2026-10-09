@@ -35,9 +35,11 @@ It redraws Gmail so it's quiet and easy to read. Gmail stays underneath, and eve
 
 AI is optional and off by default. If you turn it on, you choose the provider, and only what a request needs goes to it, straight from your browser.
 
-Umbra collects zero data. No server, no tracking, no ads.
+Nothing is sent to Umbra's developer. No server, no tracking, no ads.
 
 Free and open source: github.com/Mason363/UmbraMail
+
+Umbra isn't made by or affiliated with Google.
 ```
 
 **Homepage URL:** `https://umbra.masn.studio`
@@ -77,64 +79,22 @@ Saves the user's settings, and caches that make Gmail's lists appear at once, on
 The local caches (conversation lists for each signed-in account, and a background picture the user may choose) can pass Chrome's 10 MB default. Everything stays on the user's computer.
 ```
 
-**Host permission: https://mail.google.com/\***
+**declarativeNetRequestWithHostAccess**
 
 ```
-Umbra Mail runs only on Gmail. It reads the page to redraw it and hands every action back to Gmail. It also loads Gmail pages as the signed-in user: the account list, a conversation's print view, and attachments the user downloads.
+Sign in with ChatGPT ends by sending the browser to http://127.0.0.1:47824/auth/callback, as OpenAI requires. Nothing listens there. One dynamic rule redirects exactly that address (top-level only) to the extension's own signin.html, which passes the sign-in to the Gmail tab.
 ```
 
-**Host permission: https://docs.google.com/\***
+**Host permission justification** (one box for all of them)
 
 ```
-Optional. If the user connects one of their own Google Sheets in Settings, Umbra Mail reads it as CSV with their Google sign-in. It never writes to it. With no sheet connected, no request is made.
-```
+mail.google.com: Umbra runs only on Gmail. It reads the page to redraw it, hands every action back to Gmail, and loads Gmail pages as the signed-in user (the account list, a conversation's print view, attachments the user downloads).
 
-**Host permission: https://generativelanguage.googleapis.com/\***
-
-```
-Optional AI. Only if the user turns AI on with their own Gemini API key: the text a request needs goes to Google's Gemini API, straight from the browser.
-```
-
-**Host permission: https://api.openai.com/\***
-
-```
-Optional AI. Only if the user turns AI on with their own OpenAI API key or Sign in with ChatGPT: the text a request needs goes to OpenAI's API, straight from the browser.
-```
-
-**Host permission: https://api.anthropic.com/\***
-
-```
-Optional AI. Only if the user turns AI on with their own Anthropic API key: the text a request needs goes to Anthropic's API, straight from the browser.
-```
-
-**Host permission: https://auth.openai.com/\***
-
-```
-Optional AI. Only for Sign in with ChatGPT: after the user signs in on OpenAI's page, Umbra Mail trades the one-time code for tokens there, and renews them there. The tokens stay on the user's computer and go only to OpenAI.
-```
-
-**declarativeNetRequestWithHostAccess, and host permission: http://127.0.0.1/\***
-
-```
-Sign in with ChatGPT ends by sending the browser to http://127.0.0.1:47824/auth/callback, as OpenAI requires. Nothing listens there. One rule redirects exactly that address (top-level only) to the extension's own signin.html, which passes the sign-in to the Gmail tab. The extension never fetches from 127.0.0.1; the host permission only lets the rule apply.
-```
-
-**Content script on https://mail.google.com/\*** (covered above)
-
-```
-compat.js and umbra.js run at document_start in Gmail's main frame only, so Umbra can draw before Gmail does.
-```
-
-**Web-accessible resources: signin.html, for https://auth.openai.com/\* and http://127.0.0.1/\***
-
-```
-The page ChatGPT's sign-in lands on, through the rule above. Used only at the end of that sign-in.
-```
-
-**Web-accessible resources: fonts/\*.woff2, for https://mail.google.com/\***
-
-```
-Umbra's fonts (Instrument Sans and Newsreader, SIL Open Font License) ship inside the extension, so no font is fetched from the internet.
+The rest are optional, used only when the user turns a feature on, straight from the browser:
+- docs.google.com: reads, never writes, a Google Sheet the user connects in Settings.
+- generativelanguage.googleapis.com, api.openai.com, api.anthropic.com: AI requests with the user's own key (or, for OpenAI, Sign in with ChatGPT), carrying only the text a request needs.
+- auth.openai.com: Sign in with ChatGPT trades its one-time code for tokens and renews them. The tokens stay on the user's computer and go only to OpenAI.
+- http://127.0.0.1: ChatGPT's sign-in ends at http://127.0.0.1:47824/auth/callback, as OpenAI requires. Nothing listens there; one declarativeNetRequest rule redirects exactly that address to the extension's own signin.html. The extension never fetches from 127.0.0.1.
 ```
 
 No optional permissions, and nothing else: no `tabs`, `activeTab`, `scripting`, `cookies`, `identity`, `history` or `<all_urls>`.
@@ -149,7 +109,7 @@ All of Umbra Mail's code is in the package. It loads no scripts, uses no eval or
 
 ## Data usage
 
-Umbra Mail handles this data in the browser to do its job, keeps it on the user's computer, and sends it nowhere except where the user turns a feature on. The developer receives none of it.
+Umbra Mail handles this data in the browser to do its job and keeps it on the user's computer. What leaves it goes to Gmail; to the AI provider, if the user turns AI on; and, for pictures, a sender's web domain to Google's icon service or a video's ID to YouTube's image server. The developer receives none of it.
 
 | Category | Tick | Why |
 | --- | --- | --- |
