@@ -315,3 +315,22 @@ function scheduledLine(main) {
   return h("div", { class: "qm-sched", role: "status" }, icon("later"), h("span", { text: say || "Scheduled to send" }),
     h("button", { type: "button", onclick: () => press(btn) }, "Cancel send"));
 }
+
+/* ---- Gmail's menus in a message window (Send's arrow: Schedule send; ⋮): Gmail places them by its own sizes,
+   which Umbra's window changes, so near the window's edge they ran past it and were cut off. They're nudged
+   back inside, every time one opens. */
+function keepMenusIn(box) {
+  if (!box || !box.isConnected) return;
+  const d = box.getBoundingClientRect();
+  for (const m of $$('.J-M, [role="menu"]', box)) {
+    if (!visible(m) || m.closest(".qm-menu")) continue;
+    const r = m.getBoundingClientRect(), left = parseFloat(getComputedStyle(m).left);
+    if (!Number.isFinite(left)) continue;
+    if (r.right > d.right - 8) m.style.left = left - (r.right - (d.right - 8)) + "px";
+    else if (r.left < d.left + 8) m.style.left = left + (d.left + 8 - r.left) + "px";
+  }
+}
+document.addEventListener("click", (e) => {
+  const box = e.target && e.target.closest && e.target.closest('.nH.Hd[role="dialog"], .ip.qm-float, .ip.qm-bar');
+  if (box) for (const ms of [0, 40, 140, 320]) setTimeout(() => keepMenusIn(box), ms);
+}, true);

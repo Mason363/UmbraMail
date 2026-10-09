@@ -263,8 +263,9 @@ const go = (hash) => { location.hash = hash; };
 function toast(msg, act) {
   let t = document.getElementById("qm-toast");
   if (t) { clearTimeout(t._qmTimer); t.remove(); }
-  t = h("div", { id: "qm-toast", role: "status", class: act ? "qm-hasact" : "" }, h("span", { text: msg }),
-    act ? h("button", { type: "button", onclick: () => { out(); act.run(); } }, act.label) : null);
+  t = h("div", { id: "qm-toast", role: "status", class: "qm-hasact" }, h("span", { text: msg }),
+    act ? h("button", { type: "button", onclick: () => { out(); act.run(); } }, act.label) : null,
+    h("button", { type: "button", class: "qm-gx", "aria-label": "Dismiss", title: "Dismiss", onclick: () => out() }, icon("x")));
   const out = () => { clearTimeout(t._qmTimer); if (!t.isConnected) return; t.classList.add("qm-out"); setTimeout(() => t.remove(), 220); };
   const later = () => { clearTimeout(t._qmTimer); t._qmTimer = setTimeout(out, act ? 6000 : 2400); };
   t.addEventListener("pointerenter", () => clearTimeout(t._qmTimer));
@@ -813,16 +814,23 @@ async function gmailMenuItems(button) {
   closeGmailMenu(m, button);
   return items;
 }
-async function pressGmailMenuItem(button, label, anchor) {
-  return openGmailPopup(async () => {
+/* press one of a Gmail menu's items. `popup`: it opens a pop-up of its own (Snooze, Move to), which is brought under
+   our button and counts as success; otherwise success is the item pressed (Forward, Reply all: a reply opens instead) */
+async function pressGmailMenuItem(button, label, anchor, popup = true) {
+  const go = async () => {
     const m = await gmailMenu(button);
     if (!m) return false;
     const it = $$('[role="menuitem"], [role="menuitemcheckbox"]', m).find((x) => visible(x) && (label instanceof RegExp ? label.test(itemLabel(x).trim()) : itemLabel(x) === label));
     if (!it) { closeGmailMenu(m, button); return false; }
-    press(it);
-    await wait(20);
+    // (Gmail's newer menus ignore a press while they're still opening: again, until the menu goes)
+    for (let i = 0; i < 4; i++) {
+      press(it);
+      await wait(i ? 220 : 60);
+      if (!it.isConnected || !visible(m) || !visible(it)) break;
+    }
     return true;
-  }, anchor || button);
+  };
+  return popup ? openGmailPopup(go, anchor || button) : go();
 }
 
 /* =================================================================== our menus */
@@ -4512,7 +4520,7 @@ function msgReply(m, how, anchor, cleared) {
     const { reply, moreBtn } = msgButtons(m);
     if (how === "reply" && reply) { press(reply); return; }
     const label = how === "all" ? REPLY_ALL_WORDS : how === "forward" ? FORWARD_WORDS : REPLY_WORDS;
-    return moreBtn ? pressGmailMenuItem(moreBtn, label, anchor) : false;
+    return moreBtn ? pressGmailMenuItem(moreBtn, label, anchor, false) : false;
   };
   // Gmail keeps one reply open per conversation (the box opens it ahead of time, to the last message)
   // and reuses it rather than open another: switch that one to Reply or Reply all and take it (your
@@ -4626,7 +4634,8 @@ function focusToSoon(dlg) {
   setTimeout(() => { window.removeEventListener("keydown", mark, true); if (!typed && dlg.isConnected && !$$("input", dlg).includes(document.activeElement)) focusTo(dlg); }, 600);
 }
 async function focusTo(dlg) {
-  const to = () => $$("input", dlg).find((i) => /^to recipients/i.test(i.getAttribute("aria-label") || "") && visible(i));
+  const to = () => $$("input", dlg).find((i) => /^to recipients/i.test(i.getAttribute("aria-label") || "") && visible(i))
+    || $$(".aoD input, [role=\"combobox\"]", dlg).find((i) => visible(i) && i.name !== "subjectbox" && i.type !== "file" && !i.closest(".editable"));
   // (the folded line opens when it takes focus, and hands it on to To)
   if (!to()) { const row = $$(".aoD.hl", dlg).find(visible); if (row) { row.focus(); if (!(await until(to, 600, 30))) press(row); } await until(to, 1500, 30); }
   const i = to();
@@ -7308,6 +7317,7 @@ function syncToast(b) {
   const shown = !/-10000/.test(b.getAttribute("style") || "") && !!text(vh) && !(hush && hush.until > Date.now() && hush.re.test(text(vh)));
   let t = document.getElementById("qm-gtoast");
   if (!shown) {
+    if (gtoastGone && gtoastGone.b === b) gtoastGone = null;
     if (t && t.qmFor === b && !t.classList.contains("qm-out")) { t.classList.add("qm-out"); setTimeout(() => { if (t.classList.contains("qm-out")) t.remove(); }, 200); }
     return;
   }
@@ -7319,6 +7329,7 @@ function syncToast(b) {
   msg = msg.replace(/\s+/g, " ").trim();
   const sig = msg + "|" + acts.map((a) => text(a)).join("|");
   if (t && t.qmFor === b && t.dataset.sig === sig && !t.classList.contains("qm-out")) return;
+  if (gtoastGone && gtoastGone.b === b && gtoastGone.sig === sig) return; // (dismissed: until Gmail says something new)
   if (t) t.remove();
   const live = (label) => {
     const els = $$('[role="link"], [role="button"], a, [id^="link_"], .ag.a8k, span', $(".vh", b) || b).filter((x) => text(x) === label);
@@ -7337,10 +7348,18 @@ function syncToast(b) {
       if (tt) { tt.classList.add("qm-out"); setTimeout(() => tt.remove(), 200); }
     } }, label);
   }));
+  t.append(h("button", { type: "button", class: "qm-gx", "aria-label": "Dismiss", title: "Dismiss", onclick: () => {
+    gtoastGone = { b, sig };
+    const close = $$("[aria-label]", b).find((x) => /^(close|dismiss)/i.test(x.getAttribute("aria-label") || "") && visible(x));
+    if (close) press(close);
+    t.classList.add("qm-out");
+    setTimeout(() => t.remove(), 200);
+  } }, icon("x")));
   t.qmFor = b;
   t.dataset.sig = sig;
   document.body.appendChild(t);
 }
+let gtoastGone = null;
 
 /* =================================================================== shortcuts (?) */
 function openKeys() {

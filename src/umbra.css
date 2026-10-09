@@ -1146,6 +1146,9 @@ html.qm .b8 { visibility: hidden !important; }
 #qm-gtoast > span { margin-right: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
 #qm-gtoast button { all: unset; cursor: pointer; height: 36px; padding: 0 12px; border-radius: 10px; color: var(--text); font: 500 15px var(--sans); transition: background-color .12s var(--ease); }
 #qm-gtoast button:hover { background: var(--hi); }
+#qm-gtoast button.qm-gx, #qm-toast button.qm-gx { all: unset; cursor: pointer; display: grid; place-items: center; width: 30px; height: 30px; margin-left: 2px; border-radius: 9px; color: var(--text-4); transition: color .12s var(--ease), background-color .12s var(--ease); }
+#qm-gtoast button.qm-gx:hover, #qm-toast button.qm-gx:hover { color: var(--text); background: var(--hi); }
+:is(#qm-gtoast, #qm-toast) button.qm-gx svg { width: 15px; height: 15px; }
 #qm-gtoast.qm-out { opacity: 0; transform: translateY(6px) scale(.98); pointer-events: none; transition: opacity .16s ease-in, transform .16s ease-in; }
 /* toasts sit above the reply box where there is one */
 html.qm:has(#qm-view .qm-cslot:not([hidden]) .qm-composer) :is(#qm-gtoast, #qm-toast) { bottom: 104px; }
@@ -2373,3 +2376,18 @@ html.qm-soft .qm-video { background: var(--face); border-color: transparent; box
   #qm-intro .qm-i-title { top: calc(30% + 20vmin); }
   #qm-intro .qm-i-page { left: 24px; right: 24px; width: auto; top: auto; bottom: 70px; transform: none; }
 }
+
+/* Gmail's newer dialogs (Schedule send and its date picker, errors): they sit in their own layer, under Umbra's
+   screens unless that layer is lifted. In Umbra's colours, the list inside them part of the dialog, not a card in it */
+html.qm body > div:has(> div > :is([role="dialog"], [role="alertdialog"])):not([id^="qm-"]) { z-index: 2147480400 !important; }
+html.qm body > div:has(> div > :is([role="dialog"], [role="alertdialog"])) > div > :is([role="dialog"], [role="alertdialog"]):not(.Hd) { background: var(--s2) !important; color: var(--text) !important; border: 1px solid var(--line-3) !important; border-radius: 22px !important; box-shadow: 0 30px 80px rgba(var(--shade), .55) !important; }
+html.qm body > div:has(> div > :is([role="dialog"], [role="alertdialog"])) :is([role="dialog"], [role="alertdialog"]):not(.Hd) :is(h1, h2, h3, div, span, label, p, td, th) { color: var(--text-2) !important; }
+html.qm body > div:has(> div > :is([role="dialog"], [role="alertdialog"])) :is([role="dialog"], [role="alertdialog"]):not(.Hd) :is(h1, h2, h3, [role="heading"]) { color: var(--text) !important; }
+html.qm body > div:has(> div > [role="dialog"]) [role="dialog"]:not(.Hd) [role="menu"] { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 4px 0 !important; animation: none !important; }
+html.qm body > div:has(> div > [role="dialog"]) [role="dialog"]:not(.Hd) [role="menuitem"]:hover { background: var(--hi) !important; }
+html.qm body > div:has(> div > :is([role="dialog"], [role="alertdialog"])) :is([role="dialog"], [role="alertdialog"]):not(.Hd) :is(input, select) { background: var(--s1) !important; color: var(--text) !important; border: 1px solid var(--line-3) !important; border-radius: 10px !important; }
+html.qm body > div:has(> div > :is([role="dialog"], [role="alertdialog"])) :is([role="dialog"], [role="alertdialog"]):not(.Hd) svg { fill: var(--text-3); }
+/* (Schedule send's calendar: Gmail's older date picker, white unless told) */
+html.qm :is([role="dialog"], [role="alertdialog"]):not(.Hd) :is(.J-JB-KA, .J-JB-KA tr, .J-JB-KA th, .J-JB-KA td, .J-JB-KA button) { background-color: transparent !important; }
+html.qm :is([role="dialog"], [role="alertdialog"]):not(.Hd) .J-JB-KA button { filter: invert(1) brightness(1.6); }
+html.qm :is([role="dialog"], [role="alertdialog"]):not(.Hd) .J-JB-KA td { color: var(--text-2) !important; }
