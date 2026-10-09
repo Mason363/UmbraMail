@@ -16,18 +16,10 @@
     <div class="qm-screen">
       <div class="qm-scroll">
         <div class="qm-inbox">
-          <h1 class="qm-title">Inbox</h1>
           <section class="qm-brief" aria-label="What matters">
             <div class="qm-line"><p>Lena moved Thursday's design review to 2 PM and needs your slides by Wednesday.</p><button type="button" class="qm-x" tabindex="-1">{{icon:x}}</button></div>
             <div class="qm-line"><p>Theo is waiting on your answer about the apartment lease.</p><button type="button" class="qm-x" tabindex="-1">{{icon:x}}</button></div>
-            <div class="qm-line"><p>Aurora Air: check-in is open for Friday's 7:40 AM flight to Lisbon.</p><button type="button" class="qm-x" tabindex="-1">{{icon:x}}</button></div>
           </section>
-          <div class="qm-calmslot">
-            <div class="qm-cpills">
-              <button type="button" class="qm-cpill qm-paperpill" tabindex="-1">{{icon:paper}}<span>The paper</span><small>6 new</small></button>
-              <div class="qm-cpill qm-tidepill" id="tide">{{icon:later}}<span>2 waiting for the tide at 4:00 PM</span><button type="button" tabindex="-1" id="letin">Let them in</button></div>
-            </div>
-          </div>
           <div class="qm-rows qm-avs" id="rows"></div>
         </div>
       </div>
@@ -35,7 +27,6 @@
   </div>
 </div>
 <div id="qm-dock"><button id="qm-fab" type="button" aria-label="New message" tabindex="-1">{{icon:plus}}</button></div>
-<template id="acts">{{icon:starred}}|{{icon:allmail}}|{{icon:later}}|{{icon:done}}|{{icon:more}}</template>
 <script src="/demo.js"></script>
 </body>
 </html>

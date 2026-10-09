@@ -2,7 +2,7 @@
 
 **A calmer Gmail.** Private, free and open source. · [umbra.masn.studio](https://umbra.masn.studio) · [Install](https://umbra.masn.studio/#install) · [Privacy](https://umbra.masn.studio/privacy)
 
-![Umbra Mail: an inbox on a dusk sky, with a few lines on what matters, the paper, and mail waiting for the tide](docs/screenshot.jpg)
+![Umbra Mail: an inbox over a sunset sky, with two lines on what matters at the top](docs/screenshot.jpg)
 
 Umbra Mail is a calmer Gmail. It redraws Gmail's inbox, conversations and search in a quiet, readable design, and it changes when new mail reaches you: a few times a day, all at once, instead of one email at a time all day. Gmail stays underneath. Every action you take (Done, Delete, Send) is handed back to Gmail, and nothing about your mail changes because Umbra shows it differently.
 

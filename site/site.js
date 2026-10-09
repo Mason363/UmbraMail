@@ -44,19 +44,13 @@
     document.querySelectorAll(".block").forEach((b) => io.observe(b));
   } else document.querySelectorAll(".block").forEach((b) => b.classList.add("seen"));
 
-  // Umbra, in action: the demo is drawn at 1280 × 800 and scaled to its window; it plays while it's in view
+  // the window: Umbra drawn at 1280 × 800, scaled to fit
   const demo = document.getElementById("demo");
   if (demo) {
     const screen = demo.parentElement;
     const fitDemo = () => { demo.style.transform = "scale(" + screen.clientWidth / 1280 + ")"; };
     fitDemo();
     if ("ResizeObserver" in window) new ResizeObserver(fitDemo).observe(screen); else addEventListener("resize", fitDemo);
-    let inView = false;
-    const tell = () => { try { demo.contentWindow.postMessage({ demo: inView && !document.hidden }, location.origin); } catch (e) { /* not loaded yet */ } };
-    demo.addEventListener("load", tell);
-    document.addEventListener("visibilitychange", tell);
-    if ("IntersectionObserver" in window) new IntersectionObserver((seen) => { inView = seen.some((e) => e.isIntersecting); tell(); }, { threshold: 0.35 }).observe(screen);
-    else { inView = true; tell(); }
   }
 
   // installing: confirm in the userscript manager, come back, and Gmail opens

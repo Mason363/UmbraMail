@@ -1,17 +1,11 @@
-/* the demo's look: Umbra's sky background at dusk (what applyLook sets on the page, as a stylesheet here) */
+/* the demo's look: Umbra with a picture behind the mail (a sky like the one in sky.jpg), as applyLook sets it */
 html.qm {
-  --qm-bgimg: linear-gradient(180deg, #3b5088 0%, #b68071 58%, #f0b486 100%);
-  --qm-bgdim: 0.32; --qm-bgdim-read: 0.82;
-  --qm-halo: 0 0 1px rgba(15, 16, 18, .555), 0 1px 3px rgba(15, 16, 18, .724), 0 0 16px rgba(15, 16, 18, .753), 0 0 34px rgba(15, 16, 18, .395);
+  --qm-bgimg: url("/sky.jpg");
+  --qm-bgdim: 0.5; --qm-bgdim-read: 0.82;
+  --qm-halo: 0 0 1px rgba(15, 16, 18, .578), 0 1px 3px rgba(15, 16, 18, .754), 0 0 16px rgba(15, 16, 18, .788), 0 0 34px rgba(15, 16, 18, .42);
   --qm-halo-icon: drop-shadow(0 1px 2px rgba(15, 16, 18, .82)) drop-shadow(0 0 8px rgba(15, 16, 18, .67));
   --qm-bgsize: cover; --qm-bgpos: 50% 50%; --qm-read: 880px;
 }
 html, body { margin: 0; height: 100%; overflow: hidden; }
-body { cursor: default; user-select: none; }
+body { cursor: default; user-select: none; pointer-events: none; }
 #qm-burger { opacity: 1; }
-#qm-view .qm-row { transition: background-color .18s ease; }
-.demo-in { animation: demo-in .7s cubic-bezier(.2, .8, .2, 1) both; }
-@keyframes demo-in { from { opacity: 0; transform: translateY(-8px); } }
-.demo-away { transition: transform .32s cubic-bezier(.55, 0, .8, .3), opacity .26s ease !important; transform: translateX(40px); opacity: 0; }
-.demo-press { scale: .95; transition: scale .12s ease; }
-#qm-view.demo-fade { opacity: 0; transition: opacity .7s ease; }
