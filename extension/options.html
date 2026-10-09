@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Umbra Mail</title>
+<style>
+  @font-face { font-family: "Instrument Sans"; font-weight: 400 700; src: url("fonts/instrument-sans-latin-wght-normal.woff2") format("woff2"); }
+  :root { color-scheme: light dark; --bg: #f6f5f2; --fg: #1d1e22; --muted: #6b6d75; --line: #dcdad4; --accent: #4d4fb3; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1012; --fg: #e9e8e4; --muted: #9a9ba3; --line: #2a2b31; --accent: #a7a2ff; } }
+  body { margin: 0; padding: 20px 22px 24px; background: var(--bg); color: var(--fg); font: 400 14px/1.5 "Instrument Sans", system-ui, sans-serif; min-width: 320px; max-width: 560px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  header img { width: 28px; height: 28px; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0; }
+  p { margin: 0 0 12px; color: var(--muted); }
+  label { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); cursor: pointer; }
+  input { margin: 3px 0 0; accent-color: var(--accent); }
+  label span { display: block; }
+  label small { display: block; color: var(--muted); font-size: 12.5px; }
+  #state { margin-top: 12px; font-size: 13px; }
+  code { font: 12.5px ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<header><img src="icon48.png" alt=""><h1>Umbra Mail</h1></header>
+<p>Umbra's settings are in Gmail: click the Umbra Mail button in the toolbar while Gmail is open.</p>
+<p>AI, when you turn it on there, runs straight from your browser: with your ChatGPT plan, your own key (Gemini, OpenAI or Anthropic), or Chrome's built-in model. Umbra collects zero data.</p>
+<p><a id="gmail" href="https://mail.google.com/" target="_blank" rel="noopener">Open Gmail</a></p>
+<script src="options.js"></script>
+</body>
+</html>

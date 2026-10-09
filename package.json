@@ -1,0 +1,18 @@
+{
+  "name": "umbra-mail",
+  "version": "1.24.0",
+  "private": true,
+  "description": "Umbra Mail: a calm Gmail, as a userscript and a Chrome extension.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs && npm run lint --silent",
+    "lint": "npx --yes eslint@8 --no-eslintrc --env browser,es2022 --parser-options=ecmaVersion:2022 --global GM_getValue,GM_setValue,GM_deleteValue,GM_addStyle,GM_xmlhttpRequest,GM_openInTab,GM_registerMenuCommand,GM_addValueChangeListener,GM_removeValueChangeListener --rule no-undef:error --rule no-unused-vars:off --rule no-dupe-keys:error --rule no-redeclare:error --rule no-unreachable:error dist/umbra.user.js",
+    "test": "node --test tests/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mason363/UmbraMail.git"
+  },
+  "homepage": "https://umbra.masn.studio"
+}

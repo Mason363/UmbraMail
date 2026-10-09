@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Umbra · Gmail, in a calmer light</title>
+<meta name="description" content="A calmer Gmail. Mail in tides, a morning paper, AI only if you want it. Umbra collects zero data.">
+<meta name="author" content="Mason Chen">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#011a5c">
+<link rel="canonical" href="https://umbra.masn.studio/">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon128.png" type="image/png" sizes="128x128">
+<link rel="apple-touch-icon" href="/icon128.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://umbra.masn.studio/">
+<meta property="og:title" content="Umbra · Gmail, in a calmer light">
+<meta property="og:description" content="A calmer Gmail. Mail in tides, a morning paper, AI only if you want it. Umbra collects zero data.">
+<meta property="og:image" content="https://umbra.masn.studio/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/instrument-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<canvas id="sky" aria-hidden="true"></canvas>
+<div class="veil" aria-hidden="true"></div>
+
+<header class="top">
+  <a class="mark" href="/">Umbra</a>
+  <nav>
+    <a href="#install">Install</a>
+    <a class="gh" href="https://github.com/Mason363/UmbraMail" rel="noopener" aria-label="Umbra on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+  </nav>
+</header>
+
+<section class="hero">
+  <h1 class="in">Umbra</h1>
+  <p class="tag in">Gmail, in a calmer light.</p>
+  <div class="cta in"><a class="btn main" href="#install">Install</a></div>
+</section>
+
+<main>
+  <section class="show" aria-label="Umbra, in action">
+    <div class="window">
+      <div class="bar" aria-hidden="true"><i></i><i></i><i></i><span>mail.google.com</span></div>
+      <div class="screen"><iframe id="demo" src="/demo.html" title="Umbra, in action: an inbox that's made up" tabindex="-1" loading="lazy"></iframe></div>
+    </div>
+    <ul class="notes">
+      <li>Mail in tides</li>
+      <li>A morning paper</li>
+      <li>AI, only if you want it</li>
+    </ul>
+  </section>
+
+  <section class="block install" id="install">
+    <h2>Calm, in a minute.</h2>
+    <a class="btn main" id="get" href="/umbra.user.js" target="_blank" rel="noopener">Install Umbra</a>
+    <p class="state" id="state" role="status" aria-live="polite"></p>
+    <p class="how">Runs in <a href="https://violentmonkey.github.io/get-it/" rel="noopener">Violentmonkey</a> or <a href="https://www.tampermonkey.net/" rel="noopener">Tampermonkey</a>, in any browser. Or the <a href="/umbra-extension.zip" download>Chrome extension</a>.</p>
+  </section>
+</main>
+
+<footer>
+  <span>Umbra collects zero data.</span>
+  <span><a href="/privacy">Privacy</a> · <a href="https://github.com/Mason363/UmbraMail" rel="noopener">GitHub</a> · <a href="https://masn.studio">Mason Chen</a></span>
+</footer>
+
+<script src="/eclipse.js"></script>
+<script src="/site.js"></script>
+</body>
+</html>
