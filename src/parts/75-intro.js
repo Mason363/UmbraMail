@@ -121,8 +121,9 @@ function intro(replay) {
     if (p === "chatgpt") {
       detail.append(signInBox({ onDone: (x) => { pick.ready = !!(x.chatgpt && x.chatgpt.signedIn && x.chatgpt.planUsage); sync(); } }),
         h("p", { class: "qm-i-note", text: "Uses your ChatGPT Plus or Pro plan. No key." }));
+      // (looking, not choosing: the AI you use now stays as it is until you finish here)
       try {
-        const st = await helper("/config", { provider: "chatgpt" }, 15000);
+        const st = await helper("/status", null, 15000);
         if (pick.ai === "chatgpt" && st.chatgpt && st.chatgpt.signedIn && st.chatgpt.planUsage) {
           pick.ready = true;
           detail.replaceChildren(h("p", { class: "qm-i-note qm-i-ok", text: "Signed in" + (st.chatgpt.email ? " as " + st.chatgpt.email : "") + "." }));
@@ -138,7 +139,7 @@ function intro(replay) {
         checking = true;
         sayAI("Checking the key…");
         try {
-          await helper("/config", { provider: p, [p + "_key"]: v }, 30000);
+          await helper("/config", { [p + "_key"]: v }, 30000);
           if (pick.ai !== p) return;
           pick.ready = true;
           sayAI("That key works.", "ok");
@@ -154,17 +155,18 @@ function intro(replay) {
       detail.append(field, h("p", { class: "qm-i-note" }, h("a", { href: k[1], target: "_blank", rel: "noopener", text: k[2] }),
         p === "gemini" ? ". On Gemini's free tier, Google may use what's sent to improve its products." : "."));
       try {
-        const st = await helper("/config", { provider: p }, 15000);
+        const st = await helper("/status", null, 15000);
         if (pick.ai === p && st[p] && st[p].hasKey) { pick.ready = true; field.placeholder = "Key saved"; sayAI("A key is already saved.", "ok"); sync(); }
       } catch (e) { /* type one */ }
       setTimeout(() => field.focus(), 60);
     } else if (p === "chrome") {
       detail.append(h("p", { class: "qm-i-note", text: "Chrome's own small model, on this computer. Nothing you read or write leaves it." }));
       try {
-        const st = await helper("/config", { provider: "chrome" }, 15000);
+        daiChromeWarm();
+        const st = await helper("/status", null, 15000);
         if (pick.ai !== "chrome") return;
-        pick.ready = st.chrome && st.chrome.state !== "unavailable";
-        if (!st.ready && st.message) sayAI(st.message);
+        pick.ready = !!st.chrome && st.chrome.state !== "unavailable";
+        if (st.chrome && !st.chrome.available) sayAI(daiChromeMessage(st.chrome.state));
       } catch (e) { sayAI(e.message, "err"); }
       sync();
     }

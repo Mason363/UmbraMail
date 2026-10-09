@@ -40,7 +40,7 @@ const header = `// ==UserScript==
 // @name         Umbra Mail
 // @namespace    ${repo}
 // @version      ${pkg.version}
-// @description  A calmer, private Gmail: new mail a few times a day, newsletters in one page, and conversations that are easy to read.
+// @description  A calmer Gmail. Private, free and open source.
 // @author       Mason Chen
 // @license      GPL-3.0-only
 // @homepageURL  ${SITE}
@@ -114,7 +114,7 @@ if (existsSync(at("./site/index.html"))) {
   mkdirSync(at(out + "fonts/"), { recursive: true });
   for (const f of readdirSync(at("./site/"))) if (!f.startsWith(".")) copyFileSync(at("./site/" + f), at(out + f));
   for (const f of readdirSync(at("./extension/fonts/"))) if (/\.woff2$|^LICENSE.*\.txt$/.test(f)) copyFileSync(at("./extension/fonts/" + f), at(out + "fonts/" + f));
-  copyFileSync(at("./extension/icon.svg"), at(out + "icon.svg"));
+  copyFileSync(at("./extension/icon32.png"), at(out + "icon32.png"));
   copyFileSync(at("./extension/icon128.png"), at(out + "icon128.png"));
   writeFileSync(at(out + "eclipse.js"), `/* Umbra's eclipse, the same one Umbra opens with (src/parts/05-eclipse.js, version ${pkg.version}) */\n` + readFileSync(at("./src/parts/05-eclipse.js"), "utf8"));
   // the demo: Umbra's own stylesheet (with its fonts from this site) and icons, filled into site/demo.html
@@ -171,7 +171,7 @@ if (existsSync(at("./site/index.html"))) {
 <title>Privacy · Umbra</title>
 <meta name="description" content="Umbra collects zero data. What it keeps on your computer, and what leaves it, and when.">
 <meta name="color-scheme" content="dark">
-<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon32.png" type="image/png" sizes="32x32">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body class="doc">

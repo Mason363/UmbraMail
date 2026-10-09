@@ -126,7 +126,8 @@ async function rowGmail(r, titles, inMenu) {
   const viaMore = async (more) => {
     const labels = more ? await gmailMenuItems(more) : [];
     const label = inMenu.find((x) => labels.some((l) => l.toLowerCase() === x.toLowerCase()));
-    return !!label && !!(await pressGmailMenuItem(more, labels.find((l) => l.toLowerCase() === label.toLowerCase())));
+    // (these open nothing: done is the menu taking the press, not a pop-up appearing)
+    return !!label && !!(await pressGmailMenuItem(more, labels.find((l) => l.toLowerCase() === label.toLowerCase()), undefined, false));
   };
   if (live) {
     const ticked = (row) => { const box = $("[role=checkbox]", row); return box && box.getAttribute("aria-checked") === "true"; };
@@ -301,7 +302,7 @@ function endChord() {
 /* ---- ⌘1…9: the menu's places, in its order (Inbox, Promotions, Social…). Holding ⌘ with the menu open shows
    each one's number where its count would be. (Chrome keeps ⌘1–9 for its own tabs; Firefox and Zen let them through.) */
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted) return;
+  if (!enabled || !e.isTrusted || introOn) return;
   const mod = IS_MAC ? e.metaKey : e.ctrlKey;
   if (e.key === (IS_MAC ? "Meta" : "Control")) { ROOT.classList.add("qm-modheld"); return; }
   if (!mod || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || document.getElementById("qm-panel-scrim")) return;
@@ -320,7 +321,7 @@ window.addEventListener("blur", () => ROOT.classList.remove("qm-modheld"));
 
 /* ---- ⌘Z ---- */
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted || !isKey(e, "undo")) return;
+  if (!enabled || !e.isTrusted || introOn || !isKey(e, "undo")) return;
   if (typing(e.target) || document.getElementById("qm-panel-scrim") || document.getElementById("qm-confirm-scrim")) return;
   e.preventDefault();
   e.stopImmediatePropagation();

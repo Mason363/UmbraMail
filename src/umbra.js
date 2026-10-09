@@ -804,8 +804,12 @@ async function gmailMenu(button) {
 }
 function closeGmailMenu(menuEl, button) {
   key("Escape", menuEl);
-  if (visible(menuEl) && button) press(button);
+  // (a closed menu can stay laid out, hidden: pressed again, it would open)
+  if (shownPopup(menuEl) && button) press(button);
+  unskip(menuEl);
 }
+// a menu Umbra opened out of sight is seen again once it's done with (the next time it opens, it's Gmail's to show)
+const unskip = (menuEl) => setTimeout(() => { if (menuEl) delete menuEl.dataset.qmSkip; }, 700);
 const itemLabel = (it) => text(it).replace(/[►▸›]\s*$/, "").trim();
 async function gmailMenuItems(button) {
   const m = await gmailMenu(button);
@@ -822,12 +826,14 @@ async function pressGmailMenuItem(button, label, anchor, popup = true) {
     if (!m) return false;
     const it = $$('[role="menuitem"], [role="menuitemcheckbox"]', m).find((x) => visible(x) && (label instanceof RegExp ? label.test(itemLabel(x).trim()) : itemLabel(x) === label));
     if (!it) { closeGmailMenu(m, button); return false; }
-    // (Gmail's newer menus ignore a press while they're still opening: again, until the menu goes)
-    for (let i = 0; i < 4; i++) {
-      press(it);
-      await wait(i ? 220 : 60);
-      if (!it.isConnected || !visible(m) || !visible(it)) break;
-    }
+    // (Gmail's newer menus ignore a press while they're still opening: again, until the menu goes or what it
+    // opens appears; a closed menu can stay laid out, hidden, so "goes" is shownPopup's)
+    const before = new Set(popups());
+    const taken = () => !it.isConnected || !shownPopup(m) || !visible(it) || popups().some((e) => !before.has(e));
+    for (let i = 0; i < 4 && !taken(); i++) { press(it); await wait(i ? 220 : 60); }
+    // (still there: Gmail didn't take it, and its menu isn't left open)
+    if (!taken()) { closeGmailMenu(m, button); return false; }
+    unskip(m);
     return true;
   };
   return popup ? openGmailPopup(go, anchor || button) : go();
@@ -4497,7 +4503,9 @@ function msgReply(m, how, anchor, cleared) {
       if (!last || last.id === m.id) return forwardInPlace(win);
       // an earlier one: turning the window over would forward the newest email instead. Empty, it's closed and the
       // forward starts clean; with your words in it, it stays, and Umbra says why (one draft per conversation)
-      if (!hasContent(win)) { closeWindow(win); return until(() => !win.isConnected || !visible(win) || !replyWindowHere(), 4000, 50).then(() => msgReply(m, how, anchor, true)); }
+      // (an empty one closes first: its own close ends by discarding it, so not a moment before it's gone;
+      // replyWindowHere stops counting it as soon as it starts closing)
+      if (!hasContent(win)) { closeWindow(win); return until(() => !win.isConnected || !visible(win), 4000, 50).then(() => msgReply(m, how, anchor, true)); }
       toast("Your reply is open in a window. Send or close it first to forward an earlier email: Gmail keeps one draft per conversation.");
       const box = $(".editable", win);
       if (box) setTimeout(() => focusEnd(box), 60);
@@ -4551,10 +4559,10 @@ async function replyAs(ip, how) {
     const b = $('[aria-label="Type of response" i]', ip);
     if (!b) return false;
     // (in a window, Gmail draws this menu inside the window itself, where its other pop-ups never are)
-    const was = new Set($$('[role="menu"]').filter(visible));
+    const was = new Set($$('[role="menu"]').filter(shownPopup));
     ROOT.classList.add("qm-hush");
     press(b);
-    const menuEl = await until(() => $$('[role="menu"]').find((x) => visible(x) && !was.has(x) && $$('[role="menuitem"]', x).some((it) => FORWARD_WORDS.test(itemLabel(it).trim()))), 1500, 30);
+    const menuEl = await until(() => $$('[role="menu"]').find((x) => shownPopup(x) && !was.has(x) && $$('[role="menuitem"]', x).some((it) => FORWARD_WORDS.test(itemLabel(it).trim()))), 1500, 30);
     ROOT.classList.remove("qm-hush");
     if (!menuEl) return false;
     const it = $$('[role="menuitem"]', menuEl).find((x) => visible(x) && FORWARD_WORDS.test(itemLabel(x).trim()));
@@ -4580,6 +4588,7 @@ async function replyAs(ip, how) {
   // can't read is a failure, said so)
   if (!it) { closeGmailMenu(m, b); const known = items.some((x) => REPLY_WORDS.test(itemLabel(x).trim())); if (how === "all" && known) delete ip.dataset.qmHow; return how === "all" && known; }
   press(it);
+  unskip(m);
   const now = await until(() => { const d = parkedDraft(); return d && $(".editable", d) && rcptSig(d) !== before ? d : null; }, 2000, 40);
   await wait(150);
   const after = now || ip;
@@ -4734,8 +4743,8 @@ async function openReply(from, kind, start, mode, prepare, fwd) {
       dlg.dataset.qmThread = thread;
       dlg.dataset.qmHome = "reply";
       dlg.dataset.qmTitle = "Re: " + (currentSubject() || "");
-      const fwd = isForward(dlg) || (ip && isForward(ip));
-      if (fwd) { dlg.dataset.qmFwd = "1"; dlg.dataset.qmTitle = "Fwd: " + (currentSubject() || ""); }
+      // (a forward, whether asked for or what Gmail made of the draft; the name isn't fwd, which is the ask above)
+      if (isForward(dlg) || (ip && isForward(ip))) { dlg.dataset.qmFwd = "1"; dlg.dataset.qmTitle = "Fwd: " + (currentSubject() || ""); }
       // it goes over the message box, wherever the click was
       const cb = composerBox();
       const over = cb && cb.offsetParent ? boxOf(cb) : from && from.isConnected && visible(from) ? boxOf(from) : null;
@@ -5492,7 +5501,8 @@ function detachBar(c) {
 /* Gmail's reply, built: it only goes into the box once its editor is there */
 const builtDraft = () => { const ip = parkedDraft(); return ip && $(".editable", ip) ? ip : null; };
 function goLive(c, focus, how) {
-  if (focus) c.wantFocus = true;
+  // (you asked for the keyboard: a draft put back quietly a moment ago doesn't keep it from you)
+  if (focus) { c.wantFocus = true; c.quietUntil = 0; }
   if (focus && document.activeElement === c.ta) c.guard = true; // keystrokes stay in the box until Gmail's editor is ready
   const ip = builtDraft();
   // (attached only once typing pauses: until then the keyboard stays in the box)
@@ -6818,7 +6828,7 @@ async function aiWrite(win, instruction) {
   finally { bar.classList.remove("qm-busy"); }
 }
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || (e.key || "").toLowerCase() !== "j") return;
+  if (!enabled || !e.isTrusted || introOn || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || (e.key || "").toLowerCase() !== "j") return;
   if (!aiOn()) return;
   if (e.target.closest && e.target.closest(".qm-composer")) return; // the message box handles its own
   const bar = e.target.closest && e.target.closest(".ip.qm-bar");
@@ -7489,7 +7499,7 @@ document.addEventListener("focusout", (e) => {
   setTimeout(giveFocusBack, 0);
 }, true);
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted || e.metaKey || e.ctrlKey || e.altKey || ownField(e.target)) return;
+  if (!enabled || !e.isTrusted || introOn || e.metaKey || e.ctrlKey || e.altKey || ownField(e.target)) return;
   // the ⌘K bar is up: whatever you type is for it, wherever the focus wandered
   const pal = palette && palette.input.isConnected && !palette.scrim.classList.contains("qm-out") ? palette.input : null;
   if (!stolen && !pal) return;
@@ -7503,7 +7513,7 @@ window.addEventListener("keydown", (e) => {
   else t.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, code: e.code, shiftKey: e.shiftKey, bubbles: true, cancelable: true }));
 }, true);
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted || !isKey(e, "palette")) return;
+  if (!enabled || !e.isTrusted || introOn || !isKey(e, "palette")) return;
   if (document.getElementById("qm-panel-scrim") || document.getElementById("qm-confirm-scrim") || fileView) return;
   // a plain-key ⌘K stand-in must not fire while you type; in a message being written ⌘K is Insert link
   if (!(e.metaKey || e.ctrlKey || e.altKey) && typing(e.target)) return;
@@ -7513,7 +7523,8 @@ window.addEventListener("keydown", (e) => {
   openPalette();
 }, true);
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted || document.getElementById("qm-panel-scrim") || document.getElementById("qm-keys-scrim")) return;
+  // (the welcome is up: its keys are its own, and nothing happens behind it)
+  if (!enabled || !e.isTrusted || introOn || document.getElementById("qm-panel-scrim") || document.getElementById("qm-keys-scrim")) return;
   if (document.getElementById("qm-confirm-scrim")) return; // a question is being asked: its own keys (esc says no)
   if (fileView) return; // a file is open over everything: its own keys
   if (catchFindAhead(e)) return;
@@ -7524,7 +7535,8 @@ window.addEventListener("keydown", (e) => {
   const mod = e.metaKey || e.ctrlKey || e.altKey;
   if (mod && !KEYS.some(([id]) => id !== "palette" && is(id))) return;
   const k = mod ? "" : e.key;
-  if (k === "Escape" && e.target.closest && e.target.closest(".ip.qm-bar")) { e.preventDefault(); e.stopImmediatePropagation(); e.target.blur(); return; }
+  // (esc in the reply bar: out of it, and the bar folds away if nothing's written)
+  if (k === "Escape" && e.target.closest && e.target.closest(".ip.qm-bar")) { e.preventDefault(); e.stopImmediatePropagation(); e.target.blur(); const sl = barSlot(); if (sl) sl.qmAside(); return; }
   if (k === "Escape") {
     if (palette) { e.preventDefault(); e.stopImmediatePropagation(); closePalette(); return; }
     if (menu) { e.preventDefault(); e.stopImmediatePropagation(); const a = menu.anchor; closeMenu(); if (a.isConnected) a.focus({ preventScroll: true }); return; }
@@ -7544,6 +7556,9 @@ window.addEventListener("keydown", (e) => {
   // "/" in a message is a slash, not Gemini's "Help me write"
   if (k === "/" && e.target.closest && e.target.closest(".editable")) { e.stopImmediatePropagation(); return; }
   if (typing(e.target) || document.getElementById("qm-panel-scrim")) return;
+  // (in a menu or a dialog, Umbra's or Gmail's, or a window being written: arrows and letters are theirs; and
+  // Space on a button you've tabbed to presses it)
+  if (k !== "Escape" && e.target.closest && (e.target.closest('.qm-menu, [role="menu"], [role="listbox"], [role="dialog"], .nH.Hd') || (k === " " && e.target.closest("button, a[href], [role=button]")))) return;
   const kind = screen.kind;
   // replying from a message open full screen happens in the conversation, under it
   if (ROOT.classList.contains("qm-mfull-on") && (is("reply") || is("replyAll") || is("forward"))) closeFullMsg(true);
@@ -7607,10 +7622,12 @@ window.addEventListener("keydown", (e) => {
     const c = composerOf();
     if (k === "Escape" || is("back")) { stop(); goBack(); }
     else if (is("done")) { const b = gmailToolbar("7", ["Archive"]); if (b) { stop(); press(b); } }
-    else if (is("trash") && keyFor("trash") !== "#") { const b = gmailToolbar("10", ["Delete"]); if (b) { stop(); press(b); } }
-    else if (is("unread") && keyFor("unread") !== "U") { const b = gmailToolbar("2", ["Mark as unread"]); if (b) { stop(); press(b); } }
-    // (the box showing: r is Reply, a is Reply all, in the box itself)
-    else if ((is("reply") || is("replyAll")) && c && c.root.offsetParent) { stop(); engage(c); openBar(is("reply") ? "reply" : "all"); }
+    // (done here, not left to Gmail's own shortcuts: those are off unless you turned them on in Gmail)
+    else if (is("trash")) { const b = gmailToolbar("10", ["Delete"]); if (b) { stop(); press(b); } }
+    else if (is("unread")) { const b = gmailToolbar("2", ["Mark as unread"]); if (b) { stop(); press(b); } }
+    else if (is("star")) { const b = starButton(); if (b) { stop(); press(b); } }
+    // r is Reply, a is Reply all, in the box under the conversation (as the buttons are), unless a window has it
+    else if ((is("reply") || is("replyAll")) && c && !threadWindow()) { stop(); engage(c); openBar(is("reply") ? "reply" : "all"); }
     else if (is("reply")) { stop(); replyBarAction("reply"); }
     else if (is("replyAll")) { stop(); replyBarAction("all"); }
     else if (is("forward")) { stop(); replyBarAction("forward"); }

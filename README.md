@@ -167,7 +167,7 @@ How the source is laid out:
 | `src/umbra.js` | The core. It reads Gmail's page, draws Umbra's own screens, and hands every action back to Gmail. Accounts, the brief, Files, ⌘K, the keyboard and settings live here. |
 | `src/parts/` | Features, joined in file-name order: `05-eclipse` (the welcome's eclipse, in WebGL), `10-calm`, `15-motion`, `20-power`, `30-writing`, `40-direct-ai` (all AI, including Sign in with ChatGPT), `50-reading`, `60-looks`, `70-settings`, `75-intro` (the welcome). `zz-start.js` starts everything. Each file opens with a comment on what it does. `*.dev.js` files go only into the dev build. |
 | `src/umbra.css` | All styles. |
-| `extension/` | The manifest, `compat.js` (the userscript's `GM_*` calls answered with extension APIs), `background.js` (requests to the sites the manifest names, new tabs, ChatGPT's sign-in coming back, the toolbar button), `signin.html`, the options page, bundled fonts, and the icons (`make-icons.mjs` draws them). |
+| `extension/` | The manifest, `compat.js` (the userscript's `GM_*` calls answered with extension APIs), `background.js` (requests to the sites the manifest names, new tabs, ChatGPT's sign-in coming back, the toolbar button), `signin.html`, the options page, bundled fonts, and the icons (drawn by `docs/store/render.mjs`, with the store's pictures). |
 | `site/` | [umbra.masn.studio](https://umbra.masn.studio): the page, its demo (Umbra's own stylesheet, with an inbox that's made up), and Vercel's config. The build adds the eclipse, the userscript, the extension .zip and the privacy page to `dist/site/`. |
 | `tests/` | `node:test` suites for the helpers, AI in the browser, and the extension build. |
 

@@ -1,0 +1,6 @@
+/* the store's pictures: still, and the inbox shows today (the list stops before yesterday rather than at the edge) */
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { cursor: default; }
+#rows .qm-day ~ .qm-day, #rows .qm-day ~ .qm-day ~ .qm-row { display: none; }
+/* how it looks: the inbox, as wide as the part the welcome leaves open (so nothing is cut off) */
+.beside { position: fixed; top: 0; right: 0; width: 46%; height: 100%; border: 0; }

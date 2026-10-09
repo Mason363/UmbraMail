@@ -208,7 +208,7 @@ function openTemplates(box) {
   setTimeout(() => window.addEventListener("pointerdown", away, true), 0);
 }
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key !== ";") return;
+  if (!enabled || !e.isTrusted || introOn || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key !== ";") return;
   let box = writingBox(e.target);
   if (!box) {
     // the reply bar's own box: Gmail's editor takes over first

@@ -797,11 +797,13 @@ async function daiConfig(body) {
   if (typeof body.smart === "string" && body.smart) cfg.smart[cfg.provider] = body.smart;
   if (flow) cfg.flow = flow;
   daiSave(cfg);
-  // Chrome downloads its model the first time a session is made (it needs the click that chose Chrome)
-  if (body.provider === "chrome" && (await daiChromeState()) === "downloadable") {
-    try { Promise.resolve(daiLM().create()).then((s) => { if (s && typeof s.destroy === "function") s.destroy(); }, () => {}); } catch (e) { /* the status says why */ }
-  }
+  if (body.provider === "chrome") await daiChromeWarm();
   return daiStatus(true);
+}
+// Chrome downloads its model the first time a session is made (it needs the click that chose Chrome)
+async function daiChromeWarm() {
+  if ((await daiChromeState()) !== "downloadable") return;
+  try { Promise.resolve(daiLM().create()).then((s) => { if (s && typeof s.destroy === "function") s.destroy(); }, () => {}); } catch (e) { /* the status says why */ }
 }
 
 /* ---- /summarize: the quick jobs ---- */
