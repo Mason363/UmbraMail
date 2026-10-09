@@ -30,7 +30,7 @@ function intro(replay) {
   const begin = h("button", { type: "button", class: "qm-i-btn qm-i-main qm-i-go", "data-in": "", onclick: () => go(1) }, "Begin");
   const title = h("section", { class: "qm-i-step qm-i-title" },
     h("h1", { "data-in": "" }, "Umbra"),
-    h("p", { class: "qm-i-tag", "data-in": "" }, "Gmail, in a calmer light."),
+    h("p", { class: "qm-i-tag", "data-in": "" }, "A calmer Gmail."),
     begin);
 
   /* ---- page 1: what Umbra is (and the one choice that changes how mail reaches you) */
@@ -38,17 +38,17 @@ function intro(replay) {
   const drawTides = () => tideSeg.replaceChildren(...[["As it comes", "off"], ["Twice a day", "two"], ["Three times", "three"]].map(([l, v]) => pill(l, pick.tides === v, () => { pick.tides = v; drawTides(); })));
   drawTides();
   const what = h("section", { class: "qm-i-step qm-i-page" },
-    h("h2", { "data-in": "" }, "Gmail, calmer."),
+    h("h2", { "data-in": "" }, "What Umbra does"),
     h("ul", { class: "qm-i-lines" },
-      h("li", { "data-in": "" }, "The Gmail you have, redrawn to be read."),
-      h("li", { "data-in": "" }, "New mail can come in tides, a few times a day."),
-      h("li", { "data-in": "" }, "Nothing leaves this computer. Umbra has no server.")),
+      h("li", { "data-in": "" }, "Redraws your Gmail so it's easy to read."),
+      h("li", { "data-in": "" }, "Can bring new mail a few times a day, all at once."),
+      h("li", { "data-in": "" }, "Keeps everything on your computer. No server, no tracking.")),
     h("div", { class: "qm-i-choice", "data-in": "" }, h("span", { class: "qm-i-label", text: "New mail" }), tideSeg),
     h("div", { class: "qm-i-actions", "data-in": "" },
       h("button", { type: "button", class: "qm-i-btn qm-i-main", onclick: () => go(2) }, "Continue"),
       h("button", { type: "button", class: "qm-i-btn qm-i-ghost", onclick: () => go(0) }, "Back")));
 
-  /* ---- page 2: AI, if you want it */
+  /* ---- page 2: AI, optional */
   const aiPills = h("div", { class: "qm-i-pills", role: "group", "aria-label": "AI" });
   const detail = h("div", { class: "qm-i-detail" });
   const agree = h("input", { type: "checkbox" });
@@ -139,8 +139,8 @@ function intro(replay) {
     }
   }
   const aiPage = h("section", { class: "qm-i-step qm-i-page" },
-    h("h2", { "data-in": "" }, "AI, if you want it."),
-    h("p", { class: "qm-i-sub", "data-in": "" }, "Summaries, suggested replies, answers about your mail."),
+    h("h2", { "data-in": "" }, "Do you want AI?"),
+    h("p", { class: "qm-i-sub", "data-in": "" }, "It can summarize emails, suggest replies and answer questions about your mail. It's off unless you turn it on."),
     h("div", { "data-in": "" }, aiPills),
     h("div", { "data-in": "" }, detail),
     h("div", { "data-in": "" }, agreeRow, aiNote),

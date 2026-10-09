@@ -27,7 +27,8 @@
     root.style.setProperty("--night", (f * 0.96).toFixed(3));
     document.body.classList.toggle("scrolled", scrollY > innerHeight * 0.55);
     if (sky) {
-      sky.P.y = at.y - f * 0.62;
+      // (it moves with the page, as if painted on it: the name under it never slides across it)
+      sky.P.y = at.y - Math.max(0, scrollY) / innerHeight;
       sky.P.dim = f * 0.3;
       sky.poke();
       if (still) sky.still();

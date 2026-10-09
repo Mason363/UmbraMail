@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Umbra Mail",
   "short_name": "Umbra",
-  "description": "A calm Gmail: mail in tides, a morning paper, files, and threads you can actually read.",
+  "description": "A calmer, private Gmail: new mail a few times a day, newsletters in one page, and conversations that are easy to read.",
   "homepage_url": "https://umbra.masn.studio",
   "minimum_chrome_version": "116",
   "icons": {

@@ -1,6 +1,6 @@
 # Umbra Mail
 
-**Gmail, in a calmer light.** · [umbra.masn.studio](https://umbra.masn.studio) · [Install](https://umbra.masn.studio/#install) · [Privacy](https://umbra.masn.studio/privacy)
+**A calmer Gmail.** Private, free and open source. · [umbra.masn.studio](https://umbra.masn.studio) · [Install](https://umbra.masn.studio/#install) · [Privacy](https://umbra.masn.studio/privacy)
 
 ![Umbra Mail: an inbox on a dusk sky, with a few lines on what matters, the paper, and mail waiting for the tide](docs/screenshot.jpg)
 

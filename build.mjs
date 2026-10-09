@@ -40,7 +40,7 @@ const header = `// ==UserScript==
 // @name         Umbra Mail
 // @namespace    ${repo}
 // @version      ${pkg.version}
-// @description  A calm, dark-or-bright Gmail: a brief at the top, mail that arrives in tides, a morning paper, files, and threads you can actually read.
+// @description  A calmer, private Gmail: new mail a few times a day, newsletters in one page, and conversations that are easy to read.
 // @author       Mason Chen
 // @license      GPL-3.0-only
 // @homepageURL  ${SITE}

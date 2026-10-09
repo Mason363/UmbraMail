@@ -10,10 +10,10 @@ Everything the Chrome Web Store dashboard asks for, ready to paste. The facts he
 Umbra Mail
 ```
 
-**Short description** (the manifest's `description`, 87 characters; the limit is 132)
+**Short description** (the manifest's `description`, 118 characters; the limit is 132)
 
 ```
-A calm Gmail: mail in tides, a morning paper, files, and threads you can actually read.
+A calmer, private Gmail: new mail a few times a day, newsletters in one page, and conversations that are easy to read.
 ```
 
 **Category:** Productivity, under Communication. Workflow & Planning would also fit.
@@ -49,7 +49,7 @@ FINDING AND DOING
 LOOKS
 • Dark, bright, or match your system. A color, your own picture, or the sky as it is now behind your mail. Glass, grain, fonts and spacing your way.
 
-AI, ONLY IF YOU WANT IT
+OPTIONAL AI
 AI is off until you turn it on. Sign in with ChatGPT (your Plus or Pro plan), choose Gemini, OpenAI or Anthropic with your own API key, or use Chrome's built-in model on your computer. Only what a request needs goes to the provider you choose, straight from your browser.
 
 PRIVACY
