@@ -6,7 +6,7 @@ from scipy.io import wavfile
 from scipy.signal import fftconvolve, butter, sosfilt
 
 SR = 48000
-LENGTH = 44.0
+LENGTH = 48.0
 rng = np.random.default_rng(7)
 N = int(SR * LENGTH)
 t_all = np.arange(N) / SR
@@ -24,14 +24,16 @@ CHORDS = [
     (9.3, "B1", ["A3", "D4", "F#4", "C#5"]),            # Bm9: the tide
     (12.15, "G2", ["B3", "D4", "F#4", "A4"]),           # Gmaj7
     (15.0, "F#2", ["A3", "D4", "F#4", "E5"]),           # D/F#: a conversation
-    (18.55, "E2", ["G3", "B3", "D4", "F#4"]),           # Em9
-    (22.1, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: finding
-    (24.55, "A2", ["G3", "C#4", "E4", "B4"]),           # A13sus
-    (27.0, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: the paper
-    (29.45, "G2", ["B3", "D4", "F#4", "C#5"]),          # Gmaj7#11
-    (31.9, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9: colors and pictures
-    (35.55, "A2", ["G3", "C#4", "E4", "B4"]),           # A13sus
-    (39.2, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the end, and rest
+    (18.35, "E2", ["G3", "B3", "D4", "F#4"]),           # Em9
+    (21.7, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: finding
+    (24.2, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (26.7, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: the paper
+    (29.2, "G2", ["B3", "D4", "F#4", "C#5"]),           # Gmaj7#11
+    (31.7, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9: your colors
+    (34.5, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (37.2, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: your pictures
+    (40.5, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (43.9, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the end, and rest
 ]
 ends = [c[0] for c in CHORDS[1:]] + [LENGTH]
 
@@ -98,8 +100,8 @@ for (start, bass, notes), end in zip(CHORDS, ends):
 
 # a few quiet notes on top, from the scale, between the chords
 MELODY = [(3.9, "F#5"), (4.8, "A5"), (7.0, "B5"), (10.4, "C#6"), (11.3, "A5"), (13.4, "F#5"), (16.3, "E5"), (17.0, "F#5"),
-          (19.9, "B5"), (23.2, "A5"), (25.6, "E5"), (28.2, "F#5"), (28.9, "C#6"), (30.6, "B5"), (33.0, "A5"), (33.8, "B5"),
-          (36.4, "C#6"), (40.3, "A5"), (41.2, "F#5")]
+          (19.7, "B5"), (22.8, "A5"), (25.3, "E5"), (27.9, "F#5"), (28.6, "C#6"), (30.3, "B5"), (32.8, "A5"), (33.6, "B5"),
+          (35.7, "B5"), (38.0, "F#5"), (38.8, "A5"), (41.4, "E5"), (44.9, "A5"), (45.8, "F#5")]
 for when, nm in MELODY:
     place(ep(hz(nm), 0.62, 3.6), when, pan=0.25, gain=1.0)
 
@@ -107,7 +109,7 @@ for when, nm in MELODY:
 step = 60 / 92 / 2
 t = 2.6
 k = 0
-while t < 39.2 - 0.05:
+while t < 43.9 - 0.05:
     chord = [c for c in CHORDS if c[0] <= t + 1e-6][-1]
     tones = chord[2][1:4] + [chord[2][2]]
     nm = tones[k % len(tones)]
@@ -124,7 +126,7 @@ def chime(f):
     s = np.sin(2 * np.pi * f * t) + 0.35 * np.sin(2 * np.pi * f * 2.76 * t) * np.exp(-t * 3)
     return s * np.minimum(1, t / 0.006) * np.exp(-t * 1.6) * 0.035
 
-for when, nm in [(2.6, "A6"), (9.3, "F#6"), (15.0, "A6"), (22.1, "B6"), (27.0, "F#6"), (31.9, "A6"), (39.2, "A6")]:
+for when, nm in [(2.6, "A6"), (9.3, "F#6"), (15.0, "A6"), (21.7, "B6"), (26.7, "F#6"), (31.7, "A6"), (37.2, "F#6"), (43.9, "A6")]:
     place(chime(hz(nm)), when, pan=0.4)
 
 # ---- the room: a long, dark, wide reverb

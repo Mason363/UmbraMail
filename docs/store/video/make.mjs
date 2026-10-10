@@ -1,14 +1,13 @@
-// The demo video's parts, made from Umbra itself: its own stylesheet and fonts, and five screens of made-up mail as
-// HyperFrames compositions (ui/*.html, 1280 × 720, drawn at 4K and kept at 2560 × 1440 so the camera can push in).
+// The demo video's parts, made from Umbra itself: its own stylesheet and fonts, and screens of made-up mail as
+// HyperFrames compositions (ui/*.html, 1280 × 720, drawn at 4K and kept at 2560 × 1440).
 //   node make.mjs ui      writes assets/ and ui/ (after `npm run build` in the repository)
 //   node make.mjs photos  fetches the three background photos into assets/photos/
-//   node make.mjs clips   renders each screen and scales it into assets/clips/
+//   node make.mjs clips   renders each screen into assets/clips/, and each look (a color or a photo) into assets/looks/
 // The photos (assets/photos/) are from Unsplash, under the Unsplash License: misty mountains (photo-1552152370-fb05b25ff17d),
 // a sunset at sea by Hannah Reding (photo-1554213808-9c5bab0f624e), a pink sea by Clark Gu (photo-1707489636403-c539c2cdc101).
 // index.html puts them together, with the words and the music (assets/bed.wav, from music.py).
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { deflateSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { fillIcons } from "../icons.mjs";
 
@@ -36,10 +35,10 @@ const letters = (t) => [...t].map((c) => `<span class="ch">${c === " " ? "&nbsp;
 
 /* ---- a screen: Umbra's stylesheet on the page, the look on <html>, one paused timeline built once the fonts are in */
 const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(", "); };
-function screen(id, dur, { bg = "", cls = "qm qm-v-list qm-spacious", body, css = "", script }) {
+function screen(id, dur, { bg = "", tinted = !!bg, cls = "qm qm-v-list qm-spacious", body, css = "", script = "" }) {
   const look = bg ? ` style="--bg:${bg};--bg-rgb:${hex(bg)}"` : "";
   return fillIcons(`<!doctype html>
-<html lang="en" class="${cls}${bg ? " qm-tinted" : ""}"${look}>
+<html lang="en" class="${cls}${tinted ? " qm-tinted" : ""}"${look}>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=1280, height=720" />
@@ -86,10 +85,11 @@ ${script}
 `);
 }
 
-/* ---- the screens */
+/* ---- the screens. Each is wiped in over the last (index.html), so each after the first starts complete and still:
+   nothing on it moves until the wipe is done (1.3 s). And each lasts, still, until the next wipe has covered it. */
 const SCREENS = {
   // the inbox arrives; one email is done (e) and goes; the cursor goes up to Lena's
-  inbox: () => screen("inbox", 7.6, {
+  inbox: () => screen("inbox", 8.4, {
     bg: "#1f4fd6",
     body: inbox(),
     script: `
@@ -98,7 +98,7 @@ const SCREENS = {
     tl.fromTo(".qm-line", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.12 }, 0.2);
     tl.fromTo(".qm-day", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 0.5);
     tl.fromTo(rows, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.07 }, 0.55);
-    tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.55, ease: "back.out(1.6)" }, 1.05);
+    tl.fromTo("#qm-fab", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 1.05);
     // then one email is done (e), and the cursor goes up to Lena's
     mark(tl, rows[2], "qm-cursor", true, 4.0);
     tl.to(rows[2], { x: -28, opacity: 0, duration: 0.34, ease: "power2.in" }, 4.5);
@@ -115,7 +115,7 @@ const SCREENS = {
   convo: () => {
     const said = "2 works. I'll send the slides tonight.";
     const msg = (who, when, lines, mine) => `<div class="qm-msg${mine ? " qm-mine" : ""}"><div class="qm-meta">${mine ? `<span>${when}</span>` : `<span class="qm-av qm-mav qm-tint" style="background:#7c8cf0">LP</span><span><button type="button" class="qm-whois">${who}</button> · ${when}</span>`}</div><div class="qm-bwrap"><div class="qm-bubble"><div class="qm-body qm-chat">${lines.map((l) => (l ? `<div>${esc(l)}</div>` : "<div><br></div>")).join("")}</div></div></div></div>`;
-    return screen("convo", 8.0, {
+    return screen("convo", 8.4, {
       bg: "#cc1f66",
       cls: "qm qm-spacious qm-on-mail",
       css: `  .typed { position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; display: flex; align-items: center; font: 400 16px/1.5 var(--sans); color: var(--text); white-space: pre; }
@@ -148,17 +148,13 @@ const SCREENS = {
 <span class="caret"></span>`,
       script: `
     const msgs = $$(".qm-convo-in > .qm-msg"), next = $(".new"), inner = $(".qm-convo-in");
-    tl.fromTo([".qm-head", ".qm-bar"], { opacity: 0 }, { opacity: 1, duration: 0.6 }, 0);
-    tl.fromTo(msgs.slice(0, 2), { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.12 }, 0.1);
-    tl.fromTo(msgs[2], { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.95);
-    tl.fromTo(".qm-cslot", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.3);
     tl.set(next, { opacity: 0 }, 0);
     // the reply, typed
     tl.set(".ph", { opacity: 0 }, 2.0);
     const done = type(tl, $(".typed"), $(".caret"), 2.0, 0.052);
     tl.to(".send-on", { opacity: 1, duration: 0.2 }, done + 0.15);
-    tl.fromTo(".sendbox", { scale: 1 }, { scale: 0.88, duration: 0.12, ease: "power2.in" }, done + 0.55);
-    tl.to(".sendbox", { scale: 1, duration: 0.25, ease: "back.out(2)" }, done + 0.67);
+    tl.fromTo(".sendbox", { opacity: 1 }, { opacity: 0.6, duration: 0.1, ease: "sine.inOut" }, done + 0.55);
+    tl.to(".sendbox", { opacity: 1, duration: 0.25, ease: "sine.inOut" }, done + 0.65);
     // sent: the words leave the box and arrive as your message
     const t = done + 0.7;
     tl.to([".typed", ".caret"], { opacity: 0, duration: 0.18 }, t);
@@ -175,7 +171,7 @@ const SCREENS = {
     const item = (ico, label, hint, sub) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span>${hint ? `<span class="qm-pal-hint">${hint}</span>` : ""}</div>`;
     const tag = (ico, label, sub, t) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span><span class="qm-pal-tag">${t}</span></div>`;
     const sec = (t) => `<div class="qm-pal-sec">${t}</div>`;
-    return screen("palette", 5.8, {
+    return screen("palette", 6.7, {
       bg: "#0f8f4a",
       css: `  .qm-pal-list { position: relative; }
   .found { position: absolute; left: 0; right: 0; top: 0; padding: 6px; opacity: 0; }
@@ -197,26 +193,27 @@ const SCREENS = {
     const scrim = $("#qm-pal-scrim"), pal = $("#qm-pal"), all = $$(".all .qm-pal-item"), found = $$(".found .qm-pal-item");
     // (the bar is as tall as its list: it closes up around what matches)
     const listEl = $(".qm-pal-list"), h0 = $(".all").offsetHeight, h1 = $(".found").offsetHeight - 12;
+    const o = 1.7; // (opened once the wipe is done)
     tl.set(listEl, { height: h0 }, 0);
-    tl.to(listEl, { height: h1, duration: 0.34, ease: "power3.out" }, 2.24);
+    tl.to(listEl, { height: h1, duration: 0.34, ease: "power3.out" }, o + 1.79);
     tl.set(scrim, { opacity: 0 }, 0);
-    tl.to(scrim, { opacity: 1, duration: 0.3, ease: "power2.out" }, 0.45);
-    tl.fromTo(pal, { opacity: 0, scale: 0.965, y: -8 }, { opacity: 1, scale: 1, y: 0, duration: 0.42, ease: "power3.out" }, 0.45);
-    mark(tl, all[0], "qm-on", true, 0.45);
-    mark(tl, all[0], "qm-on", false, 1.25); mark(tl, all[1], "qm-on", true, 1.25);
-    mark(tl, all[1], "qm-on", false, 1.55); mark(tl, all[2], "qm-on", true, 1.55);
+    tl.to(scrim, { opacity: 1, duration: 0.3, ease: "power2.out" }, o);
+    tl.fromTo(pal, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.42, ease: "power3.out" }, o);
+    mark(tl, all[0], "qm-on", true, o);
+    mark(tl, all[0], "qm-on", false, o + 0.8); mark(tl, all[1], "qm-on", true, o + 0.8);
+    mark(tl, all[1], "qm-on", false, o + 1.1); mark(tl, all[2], "qm-on", true, o + 1.1);
     // a few letters: the list becomes what matches
-    tl.set(".field .ph", { opacity: 0 }, 2.15);
-    type(tl, $(".field .typed"), $(".caret"), 2.15, 0.11);
-    tl.to(".all", { opacity: 0, duration: 0.14 }, 2.2);
-    tl.to(".found", { opacity: 1, duration: 0.2 }, 2.26);
-    mark(tl, found[0], "qm-on", true, 2.26);
-    tl.fromTo(found, { y: 6 }, { y: 0, duration: 0.35, ease: "power3.out", stagger: 0.04 }, 2.26);`,
+    tl.set(".field .ph", { opacity: 0 }, o + 1.7);
+    type(tl, $(".field .typed"), $(".caret"), o + 1.7, 0.11);
+    tl.to(".all", { opacity: 0, duration: 0.14 }, o + 1.75);
+    tl.to(".found", { opacity: 1, duration: 0.2 }, o + 1.81);
+    mark(tl, found[0], "qm-on", true, o + 1.81);
+    tl.fromTo(found, { y: 6 }, { y: 0, duration: 0.35, ease: "power3.out", stagger: 0.04 }, o + 1.81);`,
     });
   },
 
   // new mail a few times a day: four wait for the tide; let in, they arrive together at the top
-  tides: () => screen("tides", 6.6, {
+  tides: () => screen("tides", 7.4, {
     bg: "#1f4fd6",
     css: `  .qm-calmslot { margin: -24px 0 28px; }`,
     body: inbox().replace('<div class="qm-rows qm-avs" id="rows">', `<div class="qm-calmslot"><div class="qm-cpills"><div class="qm-cpill qm-tidepill">{{icon:later}}<span>4 waiting for the tide at 3:00 PM</span><button type="button" class="letin">Let them in</button></div></div></div><div class="qm-rows qm-avs" id="rows">`),
@@ -225,43 +222,13 @@ const SCREENS = {
     const slot = $(".qm-calmslot"), pill = $(".qm-tidepill");
     tl.set(fresh, { opacity: 0 }, 0);
     tl.set(old, { y: -4 * h }, 0);
-    tl.fromTo("#qm-burger", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 0);
-    tl.fromTo(".qm-line", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.1 }, 0.05);
-    tl.fromTo(pill, { opacity: 0, y: 10, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, 0.3);
-    tl.fromTo([".qm-day", ...old], { opacity: 0 }, { opacity: 1, duration: 0.6, stagger: 0.06 }, 0.4);
-    tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.6)" }, 0.6);
-    // let them in: the button gives, the pill goes, the four arrive together
-    tl.fromTo(".letin", { scale: 1 }, { scale: 0.9, duration: 0.12, ease: "power2.in" }, 2.4);
-    tl.to(".letin", { scale: 1, duration: 0.25, ease: "back.out(2)" }, 2.52);
-    tl.to(pill, { opacity: 0, scale: 0.96, duration: 0.3, ease: "power2.in" }, 2.9);
+    // let them in: the button is pressed, the pill goes, the four arrive together
+    tl.fromTo(".letin", { opacity: 1 }, { opacity: 0.6, duration: 0.1, ease: "sine.inOut" }, 2.4);
+    tl.to(".letin", { opacity: 1, duration: 0.25, ease: "sine.inOut" }, 2.5);
+    tl.to(pill, { opacity: 0, duration: 0.3, ease: "power2.in" }, 2.9);
     tl.to(slot, { height: 0, marginTop: 0, marginBottom: 0, duration: 0.5, ease: "power3.inOut" }, 3.05);
     tl.to(old, { y: 0, duration: 0.75, ease: "power3.inOut" }, 3.2);
     tl.fromTo(fresh, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.08 }, 3.4);`,
-  }),
-
-  // your colors, then your pictures: the same inbox in blue, pink and green, then over three photos
-  looks: () => screen("looks", 7.4, {
-    bg: "#1f4fd6",
-    css: `  html.qm {
-    --qm-bgimg: none; --qm-bgdim: 0.36;
-    --qm-halo: 0 0 1px rgba(15, 16, 18, .5), 0 1px 3px rgba(15, 16, 18, .7), 0 0 16px rgba(15, 16, 18, .7), 0 0 34px rgba(15, 16, 18, .4);
-    --qm-halo-icon: drop-shadow(0 1px 2px rgba(15, 16, 18, .8)) drop-shadow(0 0 8px rgba(15, 16, 18, .6));
-  }
-  .pic { position: absolute; inset: 0; z-index: -2; background-size: cover; background-position: 50% 50%; opacity: 0; }`,
-    body: inbox(5).replace('<div id="qm-view">', '<div id="qm-view"><div class="pic" style="background-image:url(../assets/photos/mountains.jpg)"></div><div class="pic" style="background-image:url(../assets/photos/sunset.jpg);background-position:50% 62%"></div><div class="pic" style="background-image:url(../assets/photos/sea.jpg)"></div>'),
-    script: `
-    const R = document.documentElement, pics = $$(".pic");
-    const to = (c, rgb, t, d = 0.45) => tl.to(R, { "--bg": c, "--bg-rgb": rgb, duration: d, ease: "sine.inOut" }, t);
-    to("#cc1f66", "204, 31, 102", 0.55);
-    to("#0f8f4a", "15, 143, 74", 1.3);
-    // your own picture: the first fades in as the page goes dark behind it, the next ones slide in over it from the right
-    tl.set(R, { attr: { class: "qm qm-v-list qm-spacious qm-bgimg qm-halo qm-halo-read" } }, 2.1);
-    tl.fromTo(pics[0], { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "sine.inOut" }, 2.1);
-    to("#0f1012", "15, 16, 18", 2.1, 0.6);
-    for (const [i, t] of [[1, 3.55], [2, 5.0]]) {
-      tl.set(pics[i], { opacity: 1 }, t);
-      tl.fromTo(pics[i], { clipPath: "inset(0% 0% 0% 100%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 1.0, ease: "power2.inOut" }, t);
-    }`,
   }),
 
   // the paper: newsletters, one page, read like one
@@ -272,7 +239,7 @@ const SCREENS = {
       ["Updates", [["F", "Fieldnote", "10:13 AM", "Your weekly summary", "Three notebooks changed this week, and two are waiting for your review.", 1], ["C", "Cityline Transit", "8:40 AM", "Weekend service changes", "The Blue Line runs every 12 minutes on Saturday, between 9 AM and 5 PM.", 0]]],
       ["Orders", [["P", "Pine & Co.", "9:15 AM", "Your order has shipped", "Two linen shirts are on their way, arriving Tuesday, October 13.", 0]]],
     ];
-    return screen("paper", 5.8, {
+    return screen("paper", 6.7, {
       body: `
 <button id="qm-burger" type="button">{{icon:menu}}</button>
 <div id="qm-view"><div class="qm-host"><div class="qm-screen"><div><div class="qm-scroll" style="overflow:hidden"><div class="qm-inbox qm-paper">
@@ -281,16 +248,34 @@ const SCREENS = {
 </div></div><div class="qm-fade"></div></div></div></div></div>
 <div id="qm-dock"><button id="qm-fab" type="button">{{icon:plus}}</button></div>`,
       script: `
-    tl.fromTo("#qm-burger", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 0);
-    tl.fromTo(".qm-titlerow", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 0.05);
-    tl.fromTo(".qm-psection h2", { opacity: 0 }, { opacity: 1, duration: 0.6, stagger: 0.25 }, 0.35);
-    tl.fromTo(".qm-story", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.75, ease: "power3.out", stagger: 0.08 }, 0.4);
-    tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.6)" }, 0.9);
-    // and on down the page, slowly
-    tl.fromTo(".qm-paper", { y: 0 }, { y: -230, duration: 3.4, ease: "sine.inOut" }, 1.6);`,
+    // on down the page, slowly, once the wipe is done
+    tl.fromTo(".qm-paper", { y: 0 }, { y: -230, duration: 2.8, ease: "sine.inOut" }, 1.7);`,
     });
   },
 };
+
+/* ---- your colors, then your pictures: the same inbox in blue, pink and green, then over three photos. Each is a
+   still, wiped in over the last in index.html. */
+const LOOKS = {
+  blue: { bg: "#1f4fd6" },
+  pink: { bg: "#cc1f66" },
+  green: { bg: "#0f8f4a" },
+  mountains: { photo: "mountains.jpg" },
+  sunset: { photo: "sunset.jpg", at: "50% 62%" },
+  sea: { photo: "sea.jpg" },
+};
+const look = (id, { bg, photo, at = "50% 50%" }) => photo
+  ? screen("look-" + id, 0.2, {
+    bg: "#0f1012", tinted: false, cls: "qm qm-v-list qm-spacious qm-bgimg qm-halo qm-halo-read",
+    css: `  html.qm {
+    --qm-bgimg: none; --qm-bgdim: 0.36;
+    --qm-halo: 0 0 1px rgba(15, 16, 18, .5), 0 1px 3px rgba(15, 16, 18, .7), 0 0 16px rgba(15, 16, 18, .7), 0 0 34px rgba(15, 16, 18, .4);
+    --qm-halo-icon: drop-shadow(0 1px 2px rgba(15, 16, 18, .8)) drop-shadow(0 0 8px rgba(15, 16, 18, .6));
+  }
+  .pic { position: absolute; inset: 0; z-index: -2; background-size: cover; background-position: ${at}; }`,
+    body: inbox(5).replace('<div id="qm-view">', `<div id="qm-view"><div class="pic" style="background-image:url(../assets/photos/${photo})"></div>`),
+  })
+  : screen("look-" + id, 0.2, { bg, body: inbox(5) });
 
 /* ---- the photos (Unsplash License; see the top of this file) */
 const PHOTOS = { mountains: "1552152370-fb05b25ff17d", sunset: "1554213808-9c5bab0f624e", sea: "1707489636403-c539c2cdc101" };
@@ -304,50 +289,41 @@ async function getPhotos() {
   }
 }
 
-/* ---- the backdrop's grain: soft grey noise, 512 × 512, tileable (a seeded generator: the same every time) */
-function writeGrain() {
-  const N = 512, crc = (b) => { let c = -1; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; } return (c ^ -1) >>> 0; };
-  const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
-  let seed = 3;
-  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const raw = Buffer.alloc((N + 1) * N);
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    const g = Math.sqrt(-2 * Math.log(rand() || 1e-9)) * Math.cos(2 * Math.PI * rand());
-    raw[y * (N + 1) + 1 + x] = Math.max(0, Math.min(255, Math.round(128 + 38 * g)));
-  }
-  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(N, 0); ihdr.writeUInt32BE(N, 4); ihdr[8] = 8; ihdr[9] = 0;
-  writeFileSync(at("./assets/grain.png"), Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]));
-}
-
 /* ---- write: Umbra's stylesheet and fonts, and the screens */
 function writeUI() {
   mkdirSync(at("./assets/fonts/"), { recursive: true });
   mkdirSync(at("./ui/"), { recursive: true });
   writeFileSync(at("./assets/umbra.css"), readFileSync(SITE + "umbra.css", "utf8").split('url("/fonts/').join('url("fonts/'));
   for (const f of readdirSync(SITE + "fonts/")) if (f.endsWith(".woff2")) copyFileSync(SITE + "fonts/" + f, at("./assets/fonts/" + f));
-  writeGrain();
   for (const [id, make] of Object.entries(SCREENS)) { writeFileSync(at(`./ui/${id}.html`), make()); console.log("  ui/" + id + ".html"); }
+  for (const [id, o] of Object.entries(LOOKS)) { writeFileSync(at(`./ui/look-${id}.html`), look(id, o)); console.log("  ui/look-" + id + ".html"); }
 }
 
-/* (HF_STATIC_DEDUP=false: otherwise the renderer reuses frames it guesses are unchanged, and a slow reveal comes out
+/* ---- render: each screen at 4K (3 × its 1280 × 720), then scaled to 2560 × 1440; and each look, a still the same way.
+   (HF_STATIC_DEDUP=false: otherwise the renderer reuses frames it guesses are unchanged, and a slow move comes out
    late, in a jump) */
-/* ---- render: each screen at 4K (3 × its 1280 × 720), then scaled down into the 1536 × 864 window it plays in */
+const render = (args) => execFileSync("npx", ["--yes", HF, "render", ...args, "--resolution", "landscape-4k", "--quiet"], { cwd: at("./"), stdio: "inherit", env: { ...process.env, HF_STATIC_DEDUP: "false" } });
 function renderClips(only) {
   mkdirSync(at("./assets/clips/"), { recursive: true });
+  mkdirSync(at("./assets/looks/"), { recursive: true });
   mkdirSync(at("./renders/"), { recursive: true });
   for (const id of Object.keys(SCREENS)) {
     if (only.length && !only.includes(id)) continue;
-    const alpha = id.endsWith("-lift");
-    const big = at(`./renders/ui-${id}.${alpha ? "webm" : "mp4"}`);
-    execFileSync("npx", ["--yes", HF, "render", "-c", `ui/${id}.html`, "--resolution", "landscape-4k", "--fps", String(FPS), "--quality", "delivery", ...(alpha ? ["--format", "webm"] : []), "-o", big, "--quiet"], { cwd: at("./"), stdio: "inherit", env: { ...process.env, HF_STATIC_DEDUP: "false" } });
-    const out = at(`./assets/clips/${id}.${alpha ? "webm" : "mp4"}`);
-    const enc = alpha
-      ? ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0", "-crf", "18", "-auto-alt-ref", "0", "-g", "30"]
-      : ["-c:v", "libx264", "-crf", "12", "-preset", "slow", "-g", "30", "-keyint_min", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart"];
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...(alpha ? ["-c:v", "libvpx-vp9"] : []), "-i", big, "-vf", "scale=2560:1440:flags=lanczos", ...enc, "-an", out]);
+    const big = at(`./renders/ui-${id}.mp4`), out = at(`./assets/clips/${id}.mp4`);
+    render(["-c", `ui/${id}.html`, "--fps", String(FPS), "--quality", "delivery", "-o", big]);
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", big, "-vf", "scale=2560:1440:flags=lanczos", "-c:v", "libx264", "-crf", "12", "-preset", "slow", "-g", "30", "-keyint_min", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", out]);
     // and a small copy for the light it casts around the window (its own file: one video, one place in the film)
-    if (!alpha) execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", out, "-vf", "scale=640:360:flags=area", "-c:v", "libx264", "-crf", "20", "-g", "30", "-pix_fmt", "yuv420p", "-an", at(`./assets/clips/glow-${id}.mp4`)]);
-    console.log("  assets/clips/" + id + (alpha ? ".webm" : ".mp4"));
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", out, "-vf", "scale=640:360:flags=area", "-c:v", "libx264", "-crf", "20", "-g", "30", "-pix_fmt", "yuv420p", "-an", at(`./assets/clips/glow-${id}.mp4`)]);
+    console.log("  assets/clips/" + id + ".mp4");
+  }
+  for (const id of Object.keys(LOOKS)) {
+    if (only.length && !only.includes(id) && !only.includes("looks")) continue;
+    const dir = at(`./renders/look-${id}/`);
+    render(["-c", `ui/look-${id}.html`, "--fps", "10", "--format", "png-sequence", "-o", dir]);
+    const frame = dir + readdirSync(dir).filter((f) => f.endsWith(".png")).sort()[0];
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frame, "-vf", "scale=2560:1440:flags=lanczos", "-pix_fmt", "rgb24", at(`./assets/looks/${id}.png`)]);
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frame, "-vf", "scale=640:360:flags=area", "-q:v", "3", at(`./assets/looks/glow-${id}.jpg`)]);
+    console.log("  assets/looks/" + id + ".png");
   }
 }
 
