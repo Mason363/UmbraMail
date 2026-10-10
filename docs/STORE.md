@@ -58,7 +58,7 @@ Drawn by `node docs/store/render.mjs` (after `npm run build`) from the scenes in
 | Screenshots, 1280 × 800, in this order | `docs/store/screenshot-1-inbox.png` … `screenshot-5-paper.png` |
 | Small promo tile, 440 × 280 | `docs/store/tile-small.png` |
 | Marquee promo tile, 1400 × 560 | `docs/store/tile-marquee.png` |
-| Promo video (a YouTube link) | made in `docs/store/video` (HyperFrames): `node make.mjs ui`, `node make.mjs photos`, `node make.mjs clips`, `python3 eclipse.py`, `python3 music.py`, then `npm run render` |
+| Promo video (a YouTube link) | made in `docs/store/video` (HyperFrames): `node make.mjs ui`, `node make.mjs photos`, `node make.mjs clips`, `python3 eclipse.py` (the sun: two public-domain NASA pictures from Wikimedia Commons), `python3 music.py`, then `npm run render` |
 
 ## Single purpose
 

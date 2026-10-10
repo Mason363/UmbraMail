@@ -126,7 +126,7 @@ def chime(f):
     s = np.sin(2 * np.pi * f * t) + 0.35 * np.sin(2 * np.pi * f * 2.76 * t) * np.exp(-t * 3)
     return s * np.minimum(1, t / 0.006) * np.exp(-t * 1.6) * 0.035
 
-for when, nm in [(1.3, "A6"), (4.8, "A6"), (11.5, "F#6"), (17.2, "A6"), (23.9, "B6"), (28.9, "F#6"), (33.9, "A6"), (39.4, "F#6"), (47.4, "A6")]:
+for when, nm in [(0.9, "A6"), (4.8, "A6"), (11.5, "F#6"), (17.2, "A6"), (23.9, "B6"), (28.9, "F#6"), (33.9, "A6"), (39.4, "F#6"), (47.0, "A6")]:
     place(chime(hz(nm)), when, pan=0.4)
 
 # ---- the room: a long, dark, wide reverb

@@ -24,10 +24,14 @@ body {
   background: linear-gradient(#012f9d, #0b5fd3 46vh, #7fa2ec 66vh, #f3dcef 80vh, #fed166 90vh, #e94442 97vh, #ab284a 100vh, #020a24 100vh) no-repeat;
 }
 body.gl { background: none; }
-#sky { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
-body:not(.gl) #sky { display: none; }
-/* the night, for the words further down (deepens with the scroll, set by site.js) */
-.veil { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(rgba(1, 6, 26, .2), rgba(1, 6, 26, .78) 60%, rgba(1, 4, 18, .9)); opacity: var(--night, 0); }
+/* the sky stays put; the sun's light is on a canvas that's part of the page, so the browser carries it as the page
+   scrolls, in step with the words. Both as tall as the screen at its tallest: a phone's toolbar sliding away doesn't
+   resize them */
+#sky { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; display: block; z-index: 0; }
+#sun { position: absolute; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; display: block; z-index: 0; pointer-events: none; }
+body:not(.gl) #sky, body:not(.gl) #sun { display: none; }
+/* the night, for the words further down (deepens with the scroll: site.js sets its opacity) */
+.veil { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; z-index: 1; pointer-events: none; background: linear-gradient(rgba(1, 6, 26, .2), rgba(1, 6, 26, .78) 60%, rgba(1, 4, 18, .9)); opacity: 0; }
 a { color: inherit; text-decoration: underline; text-decoration-color: rgba(255, 255, 255, .4); text-underline-offset: 3px; text-decoration-thickness: 1px; transition: text-decoration-color .2s; }
 a:hover { text-decoration-color: #fff; }
 :focus-visible { outline: 2px solid rgba(255, 255, 255, .85); outline-offset: 3px; border-radius: 6px; }
@@ -53,7 +57,7 @@ h1 { margin: 0; font: 380 clamp(64px, 11vmin, 128px)/1 var(--serif); letter-spac
 .cta { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 34px; }
 .free { font-size: 13.5px; color: var(--faint); letter-spacing: .01em; }
 
-.btn { display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 26px; border-radius: 24px; font: 500 15.5px/1 var(--sans); color: #fff; text-decoration: none; background: rgba(255, 255, 255, .13); border: 1px solid rgba(255, 255, 255, .26); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); transition: background-color .2s, transform .2s var(--ease), box-shadow .2s; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 26px; border-radius: 24px; font: 500 15.5px/1 var(--sans); color: #fff; text-decoration: none; background: rgba(255, 255, 255, .13); border: 1px solid rgba(255, 255, 255, .26); transition: background-color .2s, transform .2s var(--ease), box-shadow .2s; }
 .btn:hover { background: rgba(255, 255, 255, .2); }
 .btn:active { transform: scale(.97); }
 .btn.main { background: #fff; color: var(--ink); border-color: #fff; font-weight: 600; box-shadow: 0 12px 40px rgba(0, 12, 50, .3); }

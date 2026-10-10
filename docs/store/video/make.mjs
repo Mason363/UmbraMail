@@ -1,11 +1,13 @@
 // The demo video's parts, made from Umbra itself: its own stylesheet and fonts, and screens of made-up mail as
 // HyperFrames compositions (ui/*.html, 1280 × 720, drawn at 4K and kept at 2560 × 1440).
 //   node make.mjs ui      writes assets/ and ui/ (after `npm run build` in the repository)
-//   node make.mjs photos  fetches the three background photos into assets/photos/
+//   node make.mjs photos  fetches the three background photos into assets/photos/, and the two of the sun into assets/sun/
 //   node make.mjs clips   renders each screen into assets/clips/, each look (a color or a photo) into assets/looks/, and
 //                         the words for the eclipse at each end into assets/eclipse/ (then python3 eclipse.py)
 // The photos (assets/photos/) are from Unsplash, under the Unsplash License: misty mountains (photo-1552152370-fb05b25ff17d),
 // a sunset at sea by Hannah Reding (photo-1554213808-9c5bab0f624e), a pink sea by Clark Gu (photo-1707489636403-c539c2cdc101).
+// The sun (assets/sun/, for eclipse.py) is from Wikimedia Commons, both public domain: its face on 10 August 2024 by
+// NASA/SDO/HMI, and the diamond ring of 21 August 2017 by NASA/Aubrey Gemignani.
 // index.html puts them together, with the words and the music (assets/bed.wav, from music.py).
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -309,6 +311,10 @@ const lockup = (id, [name, tag, small]) => `<!doctype html>
 `;
 
 /* ---- the photos (Unsplash License; see the top of this file) */
+const SUN = {
+  face: "https://upload.wikimedia.org/wikipedia/commons/0/01/SDO_20240810_000000_4096_HMIIC_%28HMI%29.jpg",
+  ring: "https://upload.wikimedia.org/wikipedia/commons/2/2d/2017_Total_Solar_Eclipse_%28NHQ201708210102%29.jpg",
+};
 const PHOTOS = { mountains: "1552152370-fb05b25ff17d", sunset: "1554213808-9c5bab0f624e", sea: "1707489636403-c539c2cdc101" };
 async function getPhotos() {
   mkdirSync(at("./assets/photos/"), { recursive: true });
@@ -317,6 +323,13 @@ async function getPhotos() {
     if (!r.ok) throw new Error("couldn't fetch " + name + ": " + r.status);
     writeFileSync(at(`./assets/photos/${name}.jpg`), Buffer.from(await r.arrayBuffer()));
     console.log("  assets/photos/" + name + ".jpg");
+  }
+  mkdirSync(at("./assets/sun/"), { recursive: true });
+  for (const [name, url] of Object.entries(SUN)) {
+    const r = await fetch(url, { headers: { "User-Agent": "UmbraDemoVideo/1.0 (https://umbra.masn.studio)" } });
+    if (!r.ok) throw new Error("couldn't fetch " + name + ": " + r.status);
+    writeFileSync(at(`./assets/sun/${name}.jpg`), Buffer.from(await r.arrayBuffer()));
+    console.log("  assets/sun/" + name + ".jpg");
   }
 }
 

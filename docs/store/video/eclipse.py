@@ -1,27 +1,40 @@
-# The eclipse at each end of the video, drawn frame by frame (nothing licensed): a close-up of the sun in totality,
-# its corona and the red of its rim around the moon; then the moon moves off, the first light breaks out at its edge
-# (the diamond ring), and the face of the sun comes back with Umbra's name on it, dark like the moon, left behind.
+# The eclipse at each end of the video, frame by frame: a close-up of the sun in totality, its corona and the red of
+# its rim around the moon; the moon moving all the while, the first light breaking out at its edge (the diamond ring),
+# and the face of the sun coming back with Umbra's name on it, dark like the moon, left behind.
 #   python3 eclipse.py            →  assets/clips/eclipse-intro.mp4 and eclipse-outro.mp4
 #   python3 eclipse.py stills     →  a few frames of each, to look at (renders/eclipse-*.png)
-# The words are masks drawn by the browser in Umbra's own type (make.mjs: node make.mjs clips eclipse).
+# Two real pictures, both public domain, from Wikimedia Commons (node make.mjs photos fetches them into assets/sun/):
+#   the face: the Sun on 10 August 2024 in visible light, NASA/SDO/HMI ("SDO 20240810 000000 4096 HMIIC (HMI).jpg")
+#   the diamond ring: the eclipse of 21 August 2017, NASA/Aubrey Gemignani ("2017 Total Solar Eclipse (NHQ201708210102).jpg")
+# The words are masks drawn by the browser in Umbra's own type (node make.mjs clips eclipse).
 import subprocess, sys
 import numpy as np
 from PIL import Image
-from scipy.ndimage import gaussian_filter
+from scipy import ndimage
+from scipy.ndimage import gaussian_filter, map_coordinates
 
 W, H, FPS = 1920, 1080, 60
 CX, CY, R = 960.0, 540.0, 400.0        # the sun: a close-up, most of the frame's height
-RM = 412.0                             # the moon, a little larger: totality
+RM = 416.0                             # the moon, a little larger: totality
 BG = np.array([9, 9, 11], np.float32) / 255   # the page; the moon and the words are this dark too
-MOVE = np.radians(-8)                  # the moon leaves a little upward, to the right
+MOVE = np.radians(-8)                  # the moon's way: a little upward, to the right
 U = np.array([np.cos(MOVE), np.sin(MOVE)])
-TRAVEL = 1000.0
 
-# the two clips: when the light comes up, when the moon moves and how far, when it all goes dark
-CLIPS = {
-    "intro": dict(length=4.8, rise=(0.05, 1.0), move=(1.1, 3.3), fade=(4.1, 4.8)),
-    "outro": dict(length=7.0, rise=(0.05, 1.0), move=(1.1, 3.3), fade=(6.3, 7.0)),
-}
+# the moon never stops: it drifts across the sun from the first frame, gathers speed after the light breaks out,
+# and glides on out of the picture (once off the sun it's as dark as the sky)
+D0, V0, VMAX, RAMP = -16.0, 40.0, 620.0, (0.7, 2.1)
+def smoother(x):
+    x = np.clip(x, 0, 1)
+    return x * x * x * (x * (6 * x - 15) + 10)
+_ts = np.linspace(0, 8, 8001)
+_v = V0 + (VMAX - V0) * smoother((_ts - RAMP[0]) / (RAMP[1] - RAMP[0]))
+_d = D0 + np.concatenate([[0], np.cumsum((_v[1:] + _v[:-1]) / 2 * np.diff(_ts))])
+def travel(t): return float(np.interp(t, _ts, _d))
+T3 = float(np.interp(RM - R, _d, _ts))              # when the moon's edge first leaves the sun's
+
+# the two clips: when the light comes up, and when it all goes dark
+CLIPS = {"intro": dict(length=4.8, rise=(0.0, 0.7), fade=(4.1, 4.8)),
+         "outro": dict(length=7.0, rise=(0.0, 0.7), fade=(6.3, 7.0))}
 
 rng = np.random.default_rng(23)
 yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
@@ -84,84 +97,112 @@ rim = np.exp(-np.maximum(h, 0) / 2.5) * (h > -0.5)
 PROM = np.maximum(prom, rim * 0.8).astype(np.float32)
 RIM = PROM[..., None] * np.array([1.7, 0.42, 0.6], np.float32)
 
-# ---- the face, as through a filter: amber, darker and redder to the edge, with the fine grain of its surface, and a spot
+# ---- the face: the real Sun, turned so its spots lie on a diagonal, brought down to our size. The few spots that would
+# sit against the words are covered with the Sun's own surface from elsewhere at the same distance from its centre
+# (the same brightness there: the face darkens evenly toward its edge), so it stays a photograph throughout
 inside = np.clip(R - r + 0.5, 0, 1).astype(np.float32)
-mu = np.sqrt(np.clip(1 - rho ** 2, 0, 1))
-limb = 1 - 0.62 * (1 - mu) - 0.22 * (1 - mu) ** 2
-centre_c, edge_c = np.array([1.0, 0.60, 0.20]), np.array([0.78, 0.24, 0.05])
-k = mu[..., None] ** 0.6
-face = (edge_c * (1 - k) + centre_c * k) * limb[..., None]
-grain = gaussian_filter(rng.normal(size=(H, W)), 1.4); grain /= grain.std()
-cells = gaussian_filter(rng.normal(size=(H, W)), 14); cells /= cells.std()
-face *= (1 + (0.035 * grain + 0.02 * cells) * mu)[..., None]
-for (px, py), ru, rp in [((CX + 192, CY - 254), 7.5, 17.0), ((CX + 226, CY - 236), 3.5, 8.0)]:
-    n = np.array([px - CX, py - CY]); n /= np.linalg.norm(n)
-    mup = np.sqrt(max(0.0, 1 - ((px - CX) ** 2 + (py - CY) ** 2) / R ** 2))
-    a = ((xx - px) * n[0] + (yy - py) * n[1]) / mup    # spots near the edge are seen at a slant
-    b = -(xx - px) * n[1] + (yy - py) * n[0]
-    d = np.hypot(a, b)
-    face *= (1 - 0.38 * np.clip(rp + 0.8 - d, 0, 1) - 0.42 * np.clip(ru + 0.8 - d, 0, 1))[..., None]
-FACE = (face * inside[..., None]).astype(np.float32)
+FACE_SRC, FACE_C, FACE_R, FACE_TURN = "assets/sun/face.jpg", 2047.7, 1876.5, 315
+def turned(img, deg):
+    """an H × W × 3 picture turned about the sun's centre"""
+    a = np.radians(deg)
+    sx = CX + np.cos(a) * dx - np.sin(a) * dy
+    sy = CY + np.sin(a) * dx + np.cos(a) * dy
+    return np.stack([map_coordinates(img[..., c], [sy, sx], order=1) for c in range(3)], -1)
+def load_face():
+    src = Image.open(FACE_SRC).convert("RGB").rotate(FACE_TURN, resample=Image.BICUBIC, center=(FACE_C, FACE_C))
+    box = (FACE_C - FACE_R * 1.02, FACE_C - FACE_R * 1.02, FACE_C + FACE_R * 1.02, FACE_C + FACE_R * 1.02)
+    side = int(round(2 * R * 1.02))
+    face = np.asarray(src.resize((side, side), Image.LANCZOS, box=box), np.float32) / 255
+    out = np.zeros((H, W, 3), np.float32)
+    x0, y0 = int(round(CX - side / 2)), int(round(CY - side / 2))
+    out[y0:y0 + side, x0:x0 + side] = face
+    lum = out.mean(2)
+    surface = ndimage.median_filter(lum, size=41)
+    spots = ndimage.binary_opening((lum < surface * 0.92) & (rho < 0.97), iterations=1)
+    spots = ndimage.binary_dilation(spots, iterations=5)
+    words = np.zeros((H, W), bool)
+    for k in CLIPS:
+        words |= np.asarray(Image.open(f"assets/eclipse/words-{k}.png").convert("L")) > 60
+    lab, n = ndimage.label(spots)
+    near_words = ndimage.binary_dilation(words, iterations=34)
+    cover = np.isin(lab, [i for i in range(1, n + 1) if (near_words & (lab == i)).any()])
+    if cover.any():
+        for deg in range(40, 360, 20):                    # a turn of the face that puts clean surface there
+            if not (turned(spots[..., None].astype(np.float32).repeat(3, -1), deg)[..., 0] > 0.1)[cover].any():
+                patch = turned(out, deg)
+                m = gaussian_filter(cover.astype(np.float32), 2.0)[..., None]
+                out = out * (1 - m) + patch * m
+                break
+    return out * inside[..., None]
 FACE_AREA = float(inside.sum())
 
-def blur(img, sigma):
-    """a wide blur, done small: 4 × smaller, then back up"""
-    s = img.reshape(H // 4, 4, W // 4, 4, 3).mean((1, 3))
-    s = gaussian_filter(s, (sigma / 4, sigma / 4, 0))
-    return np.stack([np.asarray(Image.fromarray(s[..., c]).resize((W, H), Image.BILINEAR)) for c in range(3)], -1)
+# ---- the diamond ring: the real one, its moon laid on ours and turned so the light breaks out where ours does
+RING_SRC, RING_C, RING_R = "assets/sun/ring.jpg", (1539.5, 1041.5), 565.0
+ring_img = np.asarray(Image.open(RING_SRC).convert("RGB"), np.float32) / 255
+ring_img = gaussian_filter(ring_img, (0.7, 0.7, 0))      # (it's brought down a little: no shimmer in its fine rays)
+ring_dir = np.array([1295.0 - RING_C[0], 1495.8 - RING_C[1]]); ring_dir /= np.linalg.norm(ring_dir)
+turn = np.arctan2(-U[1], -U[0]) - np.arctan2(ring_dir[1], ring_dir[0])   # its light's way onto ours (behind the moon's path)
+BEAD = np.array([CX, CY]) - R * U
+def ring_layer(moon_c):
+    """the photo, placed on the moon where it is now, only near where the light breaks out"""
+    x0, x1 = max(0, int(BEAD[0] - 460)), int(BEAD[0] + 460)
+    y0, y1 = max(0, int(BEAD[1] - 460)), int(BEAD[1] + 460)
+    px, py = xx[y0:y1, x0:x1] - moon_c[0], yy[y0:y1, x0:x1] - moon_c[1]
+    k = RING_R / RM
+    c, s = np.cos(-turn), np.sin(-turn)
+    sx, sy = RING_C[0] + k * (c * px - s * py), RING_C[1] + k * (s * px + c * py)
+    out = np.zeros((y1 - y0, x1 - x0, 3), np.float32)
+    for ch in range(3):
+        out[..., ch] = map_coordinates(ring_img[..., ch], [sy, sx], order=1, mode="constant", cval=0)
+    q = np.hypot(xx[y0:y1, x0:x1] - BEAD[0], yy[y0:y1, x0:x1] - BEAD[1])
+    out *= np.clip(1 - (q / 440) ** 2, 0, 1)[..., None] ** 1.5
+    return (slice(y0, y1), slice(x0, x1)), out
 
 def soft(x):
     """film-like: true up to 0.8, then rolling off toward white"""
     return np.where(x < 0.8, x, 0.8 + 0.2 * (1 - np.exp(-(x - 0.8) / 0.2)))
 
-def moon_mask(t, move):
+def moon_at(t):
+    d = travel(t)
+    return np.array([CX + d * U[0], CY + d * U[1]]), d
+
+def moon_mask(t):
     """the moon's disc, with the blur of its own movement over half a frame"""
     m = np.zeros((H, W), np.float32)
     for s in np.linspace(-0.25, 0.25, 7):
-        d = TRAVEL * ease(t + s / FPS, *move)
-        mx, my = CX + d * U[0], CY + d * U[1]
-        m += np.clip(RM - np.hypot(xx - mx, yy - my) + 0.5, 0, 1)
-    return m / 7, TRAVEL * ease(t, *move)
+        c, _ = moon_at(t + s / FPS)
+        m += np.clip(RM - np.hypot(xx - c[0], yy - c[1]) + 0.5, 0, 1)
+    return m / 7
 
-BEAD = (CX - R * U[0], CY - R * U[1])   # where the light first breaks out: the sun's rim, behind the moon's way
-
-def first_light(move):
-    """when the moon's edge first leaves the sun's: it has to travel the difference of their sizes"""
-    t = move[0]
-    while TRAVEL * ease(t, *move) < RM - R: t += 0.0005
-    return t
-
-def frame(t, words, c, dither):
-    moon, d = moon_mask(t, c["move"])
-    t3 = first_light(c["move"])
+def frame(t, face, words, c, dither):
+    moon = moon_mask(t)
     sky = 1 - moon
     shown = inside * sky
     a = float(shown.sum()) / FACE_AREA                  # how much of the face is out
-    # the light comes up from black. The first light out burns white for a moment (the diamond ring: a bead on the
-    # rim where it breaks out, and a glow); then the camera stops down: the corona goes, and the face settles to amber
     up = ease(t, *c["rise"])
-    ring = ease(t, t3, t3 + 0.12) * np.exp(-max(0.0, t - t3 - 0.12) / 0.2)
-    corona_on = up * np.exp(-a / 0.035)
-    sun = FACE * (shown * (1 - words))[..., None] * (1 + 9 * ring + 3 * np.exp(-a / 0.004))
-    light = sun + (CORONA * (1 - 0.75 * PROM)[..., None] + RIM) * (corona_on * (1 - inside) * sky)[..., None]   # (the prominences stand in front of the corona)
-    glow = blur(light, 10) * 0.05 + blur(light, 40) * 0.035 + blur(light, 120) * 0.025
-    if ring > 0.002:
-        glow += (blur(sun, 10) * 0.35 + blur(sun, 40) * 0.4 + blur(sun, 120) * 0.25) * ring
-        q = np.hypot(xx - BEAD[0], yy - BEAD[1])
-        bead = ring ** 1.6 * (3.2 * np.exp(-q / 7) + 1.0 * np.exp(-q / 30) + 0.35 * np.exp(-q / 110) + 0.08 * np.exp(-q / 360))
-        glow += bead[..., None] * np.array([1.0, 0.96, 0.9], np.float32)
-    out = soft(light + glow)
+    # the first light out burns white for a moment, then the camera stops down: the corona goes, the face settles
+    flash = ease(t, T3, T3 + 0.1) * np.exp(-max(0.0, t - T3 - 0.1) / 0.25)
+    corona_on = up * np.exp(-a / 0.035) * (1 - 0.65 * flash)
+    # (too much light goes white, the way film does, not to a brighter yellow)
+    burn = 6 * flash + 2 * np.exp(-a / 0.004)
+    lit = face * (shown * (1 - words))[..., None]
+    sun = lit * (1 + burn) + (lit.mean(2, keepdims=True) * 0.9 * burn)
+    light = sun + (CORONA * (1 - 0.75 * PROM)[..., None] + RIM) * (corona_on * (1 - inside) * sky)[..., None]
+    out = soft(light)
+    if flash > 0.004:                                   # the real diamond ring, over ours: it only ever adds light
+        where, photo = ring_layer(moon_at(t)[0])
+        out[where] = np.maximum(out[where], photo * min(1.0, flash * 1.15))
     out *= 1 - ease(t, *c["fade"])
     return np.clip(BG + out + dither, 0, 1)
 
 def render(name, stills=None):
     c = CLIPS[name]
     words = np.asarray(Image.open(f"assets/eclipse/words-{name}.png").convert("L"), np.float32) / 255
+    face = load_face()
     if stills:
         for t in stills:
-            img = frame(t, words, c, 0)
+            img = frame(t, face, words, c, 0)
             Image.fromarray((img * 255 + 0.5).astype(np.uint8)).save(f"renders/eclipse-{name}-{t:.2f}.png")
-            print("  renders/eclipse-%s-%.2f.png" % (name, t))
         return
     n = int(round(c["length"] * FPS))
     out = f"assets/clips/eclipse-{name}.mp4"
@@ -170,16 +211,16 @@ def render(name, stills=None):
     noise = np.random.default_rng(5)
     for i in range(n):
         dither = (noise.random((H, W, 1), np.float32) - 0.5) / 255   # (so the long glows don't band)
-        img = frame(i / FPS, words, c, dither)
+        img = frame(i / FPS, face, words, c, dither)
         enc.stdin.write((img * 255 + 0.5).astype(np.uint8).tobytes())
     enc.stdin.close()
     enc.wait()
     print("  " + out, n, "frames")
 
 if __name__ == "__main__":
+    print(f"  the light breaks out at {T3:.2f} s; the moon is off the sun by {float(np.interp(R + RM, _d, _ts)):.2f} s")
     if sys.argv[1:2] == ["stills"]:
-        render("intro", [1.2, 1.3, 1.36, 1.44, 1.52, 1.62, 1.75, 2.1, 2.6])
-        render("outro", [3.6])
+        render("intro", [0.3, T3 - 0.05, T3 + 0.05, T3 + 0.12, T3 + 0.25, T3 + 0.45, 1.6, 2.2, 3.4])
     else:
         for name in CLIPS:
             render(name)

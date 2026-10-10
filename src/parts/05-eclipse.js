@@ -4,13 +4,12 @@
    photo, centre and edges), and the light is added the way a camera sees it (in linear light, then a soft
    shoulder, film grain, a little vignette). The moon slides over the sun; the sky darkens into that
    twilight; beads of light and a diamond ring; then the corona, the prominences, a few stars.
-   No dependencies: the website uses this same file (it's copied there by the build).
-   makeEclipse(canvas) → { P (the scene's numbers), to(target, ms, ease), run(), stop(), destroy(), still() } or null (no WebGL2) */
+   No dependencies: the website uses this same file (it's copied there by the build). There it draws on two
+   canvases (opt.light): the sky on one that stays put, and the sun with its light on one that moves with the
+   page, so the browser itself carries the sun as the page scrolls, in step with the words under it.
+   makeEclipse(canvas, { light }) → { P (the scene's numbers), to(target, ms, ease), run(), stop(), destroy(), still() } or null (no WebGL2) */
 function makeEclipse(canvas, opt) {
   opt = opt || {};
-  let gl = null;
-  try { gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, powerPreference: "high-performance" }); } catch (e) { gl = null; }
-  if (!gl) return null;
 
   // the sky, 48 rows top to bottom: the middle of the photo, and its edges
   const MID = "012f9d0032a10135a40237a9013bae003eb10141b60145ba0148be014cc2014fc60153c90256cb045acf085dd20c61d51166d7176ada1d6fdc2574df2e79e0387fe34285e44d8be55791e86497ea719deb7fa2ec8ea8ed9cafeeacb5efbabcefcac3f0d9ccf0e8d5f1f4dceffbe3ecffebebfff1eafff3e4fef2daffeec4fee49cfed166feae3dfd822fe94442ab284a";
@@ -19,9 +18,13 @@ function makeEclipse(canvas, opt) {
   const VS = `#version 300 es
 in vec2 a;
 void main() { gl_Position = vec4(a, 0.0, 1.0); }`;
-  const FS = `#version 300 es
+  // PART 0: everything on one canvas. 1: the sky alone. 2: the light of the sun, the moon's shadow and the glare,
+  // to lay over the sky: added to it, and darkening it where the moon is (a premultiplied picture)
+  const FS = (part) => `#version 300 es
+#define PART ${part}
 precision highp float;
 uniform vec2 uRes;
+uniform vec4 uView;     // where the screen is on this canvas, in pixels: the sky and the lens stay with the screen
 uniform float uTime;
 uniform vec2 uSun;      // the sun's centre, in pixels from the top left
 uniform float uR;       // its radius, in pixels
@@ -63,9 +66,11 @@ float fbm(vec3 p) {
 float h2(vec2 p) { return float(hash3(uvec3(uvec2(ivec2(floor(p)) + 65536), 7u))) * (1.0 / 4294967296.0); }
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
 
+vec3 shoulder(vec3 c) { return mix(c, 1.0 - 0.25 * exp(-(c - 0.75) / 0.25), step(0.75, c)); }
+
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
-  vec2 uv = p / uRes;
+  vec2 uv = (p - uView.xy) / uView.zw;
   float px = 1.0 / uR;                       // one pixel, in sun radii
   vec2 d = (p - uSun) / uR;
   float r = length(d);
@@ -84,14 +89,14 @@ void main() {
   // before totality: the same twilight, brighter (more light in the air), a little paler
   float lit = pow(1.0 - uDark, 1.4);
   vec3 sky = mix(night, vec3(dot(night, vec3(0.3, 0.55, 0.15))), lit * 0.2) * (1.0 + 2.4 * lit * pow(1.0 - y, 1.5));
-  // in totality the sky is darkest around the sun, lightest at the horizon
-  sky *= mix(1.0, 0.5 + 0.5 * smoothstep(0.0, 7.0, r), uDark * 0.85);
   sky *= 1.0 - uDim;
-
-  // ---- what's beyond the atmosphere, hidden by the moon: the sun, the corona, prominences, stars
+  // in totality the sky is darkest around the sun, lightest at the horizon; and the moon itself is dark
   float aa = 1.5 * px;
   float inMoon = 1.0 - smoothstep(uK - aa, uK + aa, rm);
-  vec3 space = vec3(0.0);
+  float shade = mix(1.0, 0.5 + 0.5 * smoothstep(0.0, 7.0, r), uDark * 0.85) * mix(1.0, 0.07, inMoon * smoothstep(0.5, 1.0, uDark));
+
+  // ---- what's beyond the atmosphere, hidden by the moon: the sun, the corona, prominences, stars
+  vec3 space = vec3(0.0), stars = vec3(0.0);
   // the sun's disc, darker toward its edge
   float inSun = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r);
   float limb = sqrt(max(0.0, 1.0 - min(r * r, 1.0)));
@@ -116,20 +121,20 @@ void main() {
       space += vec3(1.0, 0.22, 0.32) * pr * exp(-max(r - 1.0, 0.0) / 0.03) * smoothstep(0.96, 1.0, r) * 2.4 * uCorona;
     }
   }
-  // stars, and a bright planet near the sun
+  // stars (they stay with the screen), and a bright planet near the sun
   if (uStars > 0.001) {
-    vec2 g = p / max(14.0, uR * 0.22);
+    vec2 g = (p - uView.xy) / max(14.0, uR * 0.22);
     vec2 cell = floor(g);
     float s = h2(cell);
     vec2 at = vec2(h2(cell + 17.0), h2(cell + 41.0));
     float dd = length(fract(g) - at);
     float tw = 0.75 + 0.25 * sin(uTime * (0.6 + s * 1.7) + s * 40.0);
     float star = smoothstep(0.986, 1.0, s) * exp(-dd * dd * 600.0) * 7.0 * tw;
-    space += vec3(0.85, 0.9, 1.0) * star * uStars * (1.0 - smoothstep(0.55, 0.85, uv.y));
+    stars = vec3(0.85, 0.9, 1.0) * star * uStars * (1.0 - smoothstep(0.55, 0.85, uv.y));
     vec2 vp = uSun + vec2(-3.6, 1.9) * uR;
     space += vec3(1.0, 0.97, 0.9) * exp(-pow(length(p - vp) / max(1.2, uR * 0.035), 2.0)) * 3.0 * uStars;
   }
-  vec3 col = sky * mix(1.0, 0.07, inMoon * smoothstep(0.5, 1.0, uDark)) + space * (1.0 - inMoon);
+  vec3 col = space * (1.0 - inMoon);
   col += inMoon * vec3(0.004, 0.006, 0.011) * uDark;     // earthshine
 
   // ---- light in the air and the lens: glare from what's left of the sun
@@ -149,64 +154,99 @@ void main() {
   }
 
   // ---- the photograph: a soft shoulder for the brightest light, vignette, grain, dither
-  col = mix(col, 1.0 - 0.25 * exp(-(col - 0.75) / 0.25), step(0.75, col));
+  vec2 vq = (uv - 0.5) * vec2(1.05, 1.0);
+  float vig = 1.0 - 0.2 * pow(length(vq) * 1.3, 2.4);
+#if PART == 2
+  // the light alone: what the whole picture would be, less the sky the other canvas already shows under it
+  // (that sky, darkened where the moon and its shadow are: so the picture here is mostly added light)
+  float a = max(1.0 - pow(shade, 1.0 / 2.2), inMoon);
+  vec3 whole = pow(max(shoulder(sky * shade + col) * uFade, 0.0), vec3(1.0 / 2.2)) * vig;
+  vec3 under = pow(max(shoulder(sky) * uFade, 0.0), vec3(1.0 / 2.2)) * vig * (1.0 - a);
+  vec3 c = max(whole - under, 0.0) + (h2(p * 1.7 + 3.0) - 0.5) / 255.0 * a;
+  o = vec4(clamp(c, 0.0, 1.0), a);
+#else
+#if PART == 1
+  col = sky + stars;
+#else
+  col = sky * shade + col + stars * (1.0 - inMoon);
+#endif
+  col = shoulder(col);
   col *= uFade;
   vec3 c = pow(max(col, 0.0), vec3(1.0 / 2.2));
-  vec2 vq = (uv - 0.5) * vec2(1.05, 1.0);
-  c *= 1.0 - 0.2 * pow(length(vq) * 1.3, 2.4);
+  c *= vig;
   float gn = h2(p + vec2(floor(uTime * 24.0) * 37.0, 11.0)) - 0.5;
   c += gn * uGrain * (0.6 + 0.4 * (1.0 - c));
   c += (h2(p * 1.7 + 3.0) - 0.5) / 255.0;
   o = vec4(clamp(c, 0.0, 1.0), 1.0);
+#endif
 }`;
 
-  const sh = (type, src) => {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const err = gl.getShaderInfoLog(s); gl.deleteShader(s); throw new Error(err || "shader"); }
-    return s;
-  };
-  let prog;
-  try {
-    prog = gl.createProgram();
-    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
-    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || "link");
-  } catch (e) {
-    if (opt.onError) opt.onError(e);
-    return null;
-  }
-  gl.useProgram(prog);
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  const loc = gl.getAttribLocation(prog, "a");
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   // the sky's colours as a 48 × 2 picture, smoothed between rows by the GPU
   const px = new Uint8Array(48 * 2 * 4);
   [MID, EDGE].forEach((hex, row) => {
     for (let i = 0; i < 48; i++) for (let c = 0; c < 3; c++) px[(row * 48 + i) * 4 + c] = parseInt(hex.substr(i * 6 + c * 2, 2), 16);
     for (let i = 0; i < 48; i++) px[(row * 48 + i) * 4 + 3] = 255;
   });
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 48, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  const U = {};
-  for (const n of ["uRes", "uTime", "uSun", "uR", "uMoon", "uK", "uVis", "uDark", "uCorona", "uRing", "uRingDir", "uStars", "uFade", "uDim", "uHor", "uGrain", "uSky"]) U[n] = gl.getUniformLocation(prog, n);
-  gl.uniform1i(U.uSky, 0);
+  // a canvas, its GL and program; its size kept as the page lays it out (read when it changes, not every frame)
+  function setup(cv, part) {
+    let gl = null;
+    try { gl = cv.getContext("webgl2", { alpha: part === 2, antialias: false, depth: false, stencil: false, premultipliedAlpha: part === 2, powerPreference: "high-performance" }); } catch (e) { gl = null; }
+    if (!gl) return null;
+    const sh = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const err = gl.getShaderInfoLog(s); gl.deleteShader(s); throw new Error(err || "shader"); }
+      return s;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS(part)));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || "link");
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "a");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 48, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const U = {};
+    for (const n of ["uRes", "uView", "uTime", "uSun", "uR", "uMoon", "uK", "uVis", "uDark", "uCorona", "uRing", "uRingDir", "uStars", "uFade", "uDim", "uHor", "uGrain", "uSky"]) U[n] = gl.getUniformLocation(prog, n);
+    gl.uniform1i(U.uSky, 0);
+    const it = { cv, gl, prog, buf, tex, U, part, w: 0, h: 0, ro: null };
+    const measure = () => { it.w = Math.max(1, cv.clientWidth); it.h = Math.max(1, cv.clientHeight); };
+    measure();
+    if (typeof ResizeObserver === "function") { it.ro = new ResizeObserver(measure); it.ro.observe(cv); }
+    else it.measure = measure;
+    return it;
+  }
+  const parts = [];
+  try {
+    for (const [cv, part] of opt.light ? [[canvas, 1], [opt.light, 2]] : [[canvas, 0]]) {
+      const it = setup(cv, part);
+      if (!it) { parts.forEach((p) => p.ro && p.ro.disconnect()); return null; }
+      parts.push(it);
+    }
+  } catch (e) {
+    if (opt.onError) opt.onError(e);
+    parts.forEach((p) => p.ro && p.ro.disconnect());
+    return null;
+  }
 
   /* ---- the scene, in a few numbers anything can animate ----
      x, y: where the sun is (fractions of the width and height); size: its radius (fraction of the shorter side);
      c: the moon's way across, -1 (just touching, before) .. 0 (centred) .. 1 (just leaving);
-     fade: 0 black .. 1; dim: darkens the sky for words on it; hor: how low the horizon glows; tilt: the moon's path */
-  const P = Object.assign({ x: 0.5, y: 0.36, size: 0.075, c: -0.6, fade: 0, dim: 0, hor: 1.7, tilt: -0.32, stars: 1, grain: 0.022 }, opt.start);
+     fade: 0 black .. 1; dim: darkens the sky for words on it; hor: how low the horizon glows; tilt: the moon's path;
+     lift: how far the light's canvas has moved up with the page (a fraction of its height) */
+  const P = Object.assign({ x: 0.5, y: 0.36, size: 0.075, c: -0.6, fade: 0, dim: 0, hor: 1.7, tilt: -0.32, stars: 1, grain: 0.022, lift: 0 }, opt.start);
   const K = 1.035; // the moon looks a little bigger than the sun: totality lasts
   const PATH = 2.05; // how far the moon is from the sun's centre at c = ±1, in sun radii (K + 1 and a little)
   // how much of a circle of radius 1 is covered by one of radius K, d apart
@@ -255,23 +295,20 @@ void main() {
     for (const fn of done) try { fn(); } catch (e) { /* the caller's own trouble */ }
   }
 
-  // ---- size: fewer pixels than the screen (it's all soft light), more when the computer keeps up
+  // ---- size: fewer pixels than the screen (it's all soft light), more when the computer keeps up. The canvas
+  // changes only when its laid-out size does (a toolbar sliding away doesn't: the website sizes it to the tallest screen)
   let q = opt.quality || (Math.min(window.devicePixelRatio || 1, 2) > 1.5 ? 0.6 : 0.85);
-  const fit = () => {
-    const w = Math.max(1, canvas.clientWidth), h = Math.max(1, canvas.clientHeight);
+  const fit = (it) => {
+    if (it.measure) it.measure();
     const s = Math.min(window.devicePixelRatio || 1, 2) * q;
-    const cw = Math.max(2, Math.round(w * s)), ch = Math.max(2, Math.round(h * s));
-    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+    const cw = Math.max(2, Math.round(it.w * s)), ch = Math.max(2, Math.round(it.h * s));
+    if (it.cv.width !== cw || it.cv.height !== ch) { it.cv.width = cw; it.cv.height = ch; }
   };
 
   let raf = 0, running = false, frames = 0, slow = 0, last = 0, drawn = 0, poked = 0;
   // when nothing is moving (only the corona's slow drift and the grain), fewer frames: kinder to a battery
   const idleFps = opt.idleFps || 60;
   function draw(now) {
-    fit();
-    const W = canvas.width, H = canvas.height;
-    gl.viewport(0, 0, W, H);
-    const R = Math.max(2, P.size * Math.min(W, H));
     const dd = Math.abs(P.c) * PATH;
     const vis = Math.max(0, 1 - covered(dd) / Math.PI);
     const dark = 1 - Math.pow(vis, 0.45);
@@ -280,25 +317,33 @@ void main() {
     const ux = Math.cos(P.tilt), uy = Math.sin(P.tilt);
     const mx = ux * P.c * PATH, my = uy * P.c * PATH;
     const ml = Math.hypot(mx, my) || 1;
-    gl.uniform2f(U.uRes, W, H);
-    gl.uniform1f(U.uTime, clock / 1000);
-    gl.uniform2f(U.uSun, P.x * W, P.y * H);
-    gl.uniform1f(U.uR, R);
-    gl.uniform2f(U.uMoon, mx, my);
-    gl.uniform1f(U.uK, K);
-    gl.uniform1f(U.uVis, vis);
-    gl.uniform1f(U.uDark, dark);
-    gl.uniform1f(U.uCorona, 1 - smooth(0.0, 0.025, vis));
-    gl.uniform1f(U.uRing, ring);
-    gl.uniform2f(U.uRingDir, -mx / ml, -my / ml);
-    gl.uniform1f(U.uStars, P.stars * (1 - smooth(0.0, 0.07, vis)));
-    gl.uniform1f(U.uFade, P.fade);
-    gl.uniform1f(U.uDim, P.dim);
-    gl.uniform1f(U.uHor, P.hor);
-    gl.uniform1f(U.uGrain, P.grain);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    for (const it of parts) {
+      fit(it);
+      const { gl, U } = it, W = it.cv.width, H = it.cv.height;
+      gl.viewport(0, 0, W, H);
+      const R = Math.max(2, P.size * Math.min(W, H));
+      gl.uniform2f(U.uRes, W, H);
+      // (the light's canvas moves with the page; the screen is further down on it by as much)
+      gl.uniform4f(U.uView, 0, it.part === 2 ? P.lift * H : 0, W, H);
+      gl.uniform1f(U.uTime, clock / 1000);
+      gl.uniform2f(U.uSun, P.x * W, P.y * H);
+      gl.uniform1f(U.uR, R);
+      gl.uniform2f(U.uMoon, mx, my);
+      gl.uniform1f(U.uK, K);
+      gl.uniform1f(U.uVis, vis);
+      gl.uniform1f(U.uDark, dark);
+      gl.uniform1f(U.uCorona, 1 - smooth(0.0, 0.025, vis));
+      gl.uniform1f(U.uRing, ring);
+      gl.uniform2f(U.uRingDir, -mx / ml, -my / ml);
+      gl.uniform1f(U.uStars, P.stars * (1 - smooth(0.0, 0.07, vis)));
+      gl.uniform1f(U.uFade, P.fade);
+      gl.uniform1f(U.uDim, P.dim);
+      gl.uniform1f(U.uHor, P.hor);
+      gl.uniform1f(U.uGrain, P.grain);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, it.tex);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
   }
   function frame(now) {
     raf = 0;
@@ -330,7 +375,10 @@ void main() {
     destroy() {
       api.stop();
       tweens = [];
-      try { gl.deleteTexture(tex); gl.deleteBuffer(buf); gl.deleteProgram(prog); const lose = gl.getExtension("WEBGL_lose_context"); if (lose) lose.loseContext(); } catch (e) { /* already gone */ }
+      for (const { gl, tex, buf, prog, ro } of parts) {
+        if (ro) ro.disconnect();
+        try { gl.deleteTexture(tex); gl.deleteBuffer(buf); gl.deleteProgram(prog); const lose = gl.getExtension("WEBGL_lose_context"); if (lose) lose.loseContext(); } catch (e) { /* already gone */ }
+      }
     },
   };
   return api;

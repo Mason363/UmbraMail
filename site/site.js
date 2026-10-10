@@ -8,7 +8,8 @@
   const home = () => ({ x: 0.5, y: narrow() ? 0.26 : 0.34, size: narrow() ? 0.07 : 0.068 });
   let at = home();
   let sky = null;
-  try { sky = typeof makeEclipse === "function" ? makeEclipse(document.getElementById("sky"), { idleFps: 30, start: Object.assign({}, at, { c: still ? 0 : -0.34, fade: still ? 1 : 0 }) }) : null; } catch (e) { sky = null; }
+  const sun = document.getElementById("sun");
+  try { sky = typeof makeEclipse === "function" ? makeEclipse(document.getElementById("sky"), { light: sun, idleFps: 30, start: Object.assign({}, at, { c: still ? 0 : -0.34, fade: still ? 1 : 0 }) }) : null; } catch (e) { sky = null; }
   const lit = () => document.body.classList.add("lit");
   if (sky) {
     document.body.classList.add("gl");
@@ -20,22 +21,27 @@
     }
   } else lit();
 
-  // scrolling: the sky deepens into night, and the eclipse rises out of the way
+  // scrolling: the sky deepens into night, and the eclipse rises out of the way. (The sun moves with the page on its
+  // own: its canvas is part of the page, so the name under it never slides across it. Only the sky behind it, which
+  // stays put, is told how far the page has gone.)
   const root = document.documentElement;
+  const veil = document.querySelector(".veil");
+  let tall = 0;
+  const measure = () => { tall = (sun && sun.clientHeight) || innerHeight; };
   const onScroll = () => {
-    const f = Math.min(1, Math.max(0, scrollY / innerHeight));
-    root.style.setProperty("--night", (f * 0.96).toFixed(3));
-    document.body.classList.toggle("scrolled", scrollY > innerHeight * 0.55);
+    const y = Math.max(0, scrollY), f = Math.min(1, y / tall);
+    if (veil) veil.style.opacity = (f * 0.96).toFixed(3);
+    document.body.classList.toggle("scrolled", y > tall * 0.55);
     if (sky) {
-      // (it moves with the page, as if painted on it: the name under it never slides across it)
-      sky.P.y = at.y - Math.max(0, scrollY) / innerHeight;
+      sky.P.lift = y / tall;
       sky.P.dim = f * 0.3;
       sky.poke();
       if (still) sky.still();
     }
   };
   addEventListener("scroll", onScroll, { passive: true });
-  addEventListener("resize", () => { at = home(); if (sky) { sky.P.x = at.x; sky.P.size = at.size; } onScroll(); });
+  addEventListener("resize", () => { measure(); at = home(); if (sky) Object.assign(sky.P, at); onScroll(); });
+  measure();
   onScroll();
 
   // each part arrives as it comes into view
