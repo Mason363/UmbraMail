@@ -1,10 +1,14 @@
 // The demo video's parts, made from Umbra itself: its own stylesheet and fonts, and five screens of made-up mail as
-// HyperFrames compositions (ui/*.html, 1280 × 720, drawn at 4K and scaled to the window they play in).
+// HyperFrames compositions (ui/*.html, 1280 × 720, drawn at 4K and kept at 2560 × 1440 so the camera can push in).
 //   node make.mjs ui      writes assets/ and ui/ (after `npm run build` in the repository)
+//   node make.mjs photos  fetches the three background photos into assets/photos/
 //   node make.mjs clips   renders each screen and scales it into assets/clips/
+// The photos (assets/photos/) are from Unsplash, under the Unsplash License: misty mountains (photo-1552152370-fb05b25ff17d),
+// a sunset at sea by Hannah Reding (photo-1554213808-9c5bab0f624e), a pink sea by Clark Gu (photo-1707489636403-c539c2cdc101).
 // index.html puts them together, with the words and the music (assets/bed.wav, from music.py).
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { deflateSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { fillIcons } from "../icons.mjs";
 
@@ -165,14 +169,19 @@ const SCREENS = {
     });
   },
 
-  // ⌘K over the inbox: down the list, then a few letters find Lena's email
-  palette: () => {
+  // ⌘K over the inbox: down the list, then a few letters find Lena's email. Drawn as two layers: the inbox under
+  // its shade (palette), and the bar alone on nothing (palette-lift, with transparency), so the bar can rise off the window
+  palette: (lift) => {
     const item = (ico, label, hint, sub) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span>${hint ? `<span class="qm-pal-hint">${hint}</span>` : ""}</div>`;
     const tag = (ico, label, sub, t) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span><span class="qm-pal-tag">${t}</span></div>`;
     const sec = (t) => `<div class="qm-pal-sec">${t}</div>`;
-    return screen("palette", 5.2, {
+    return screen(lift ? "palette-lift" : "palette", 5.2, {
       bg: "#0f8f4a",
-      css: `  .qm-pal-list { position: relative; }
+      css: (lift ? `  html, body, html.qm, html.qm body { background: transparent !important; }
+  #qm-view, #qm-dock, #qm-burger { visibility: hidden !important; }
+  #qm-pal-scrim { background: transparent !important; }
+` : `  #qm-pal, .caret { visibility: hidden !important; }
+`) + `  .qm-pal-list { position: relative; }
   .found { position: absolute; left: 0; right: 0; top: 0; padding: 6px; opacity: 0; }
   .field { position: relative; flex: 1; height: 24px; }
   .field .ph, .field .typed { position: absolute; inset: 0; display: flex; align-items: center; font: 400 17px var(--sans); white-space: pre; }
@@ -209,6 +218,56 @@ const SCREENS = {
     tl.fromTo(found, { y: 6 }, { y: 0, duration: 0.35, ease: "power3.out", stagger: 0.04 }, 2.26);`,
     });
   },
+  "palette-lift": () => SCREENS.palette(true),
+
+  // new mail a few times a day: four wait for the tide; let in, they arrive together at the top
+  tides: () => screen("tides", 5.6, {
+    bg: "#1f4fd6",
+    css: `  .qm-calmslot { margin: -24px 0 28px; }`,
+    body: inbox().replace('<div class="qm-rows qm-avs" id="rows">', `<div class="qm-calmslot"><div class="qm-cpills"><div class="qm-cpill qm-tidepill">{{icon:later}}<span>4 waiting for the tide at 3:00 PM</span><button type="button" class="letin">Let them in</button></div></div></div><div class="qm-rows qm-avs" id="rows">`),
+    script: `
+    const rows = $$(".qm-row"), fresh = rows.slice(0, 4), old = rows.slice(4), h = rows[1].offsetTop - rows[0].offsetTop;
+    const slot = $(".qm-calmslot"), pill = $(".qm-tidepill");
+    tl.set(fresh, { opacity: 0 }, 0);
+    tl.set(old, { y: -4 * h }, 0);
+    tl.fromTo("#qm-burger", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 0);
+    tl.fromTo(".qm-line", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.1 }, 0.05);
+    tl.fromTo(pill, { opacity: 0, y: 10, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, 0.3);
+    tl.fromTo([".qm-day", ...old], { opacity: 0 }, { opacity: 1, duration: 0.6, stagger: 0.06 }, 0.4);
+    tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.6)" }, 0.6);
+    // let them in: the button gives, the pill goes, and the four arrive together
+    tl.fromTo(".letin", { scale: 1 }, { scale: 0.9, duration: 0.12, ease: "power2.in" }, 2.2);
+    tl.to(".letin", { scale: 1, duration: 0.25, ease: "back.out(2)" }, 2.32);
+    tl.to(pill, { opacity: 0, scale: 0.96, duration: 0.3, ease: "power2.in" }, 2.45);
+    tl.to(slot, { height: 0, marginTop: 0, marginBottom: 0, duration: 0.5, ease: "power3.inOut" }, 2.6);
+    tl.to(old, { y: 0, duration: 0.75, ease: "power3.inOut" }, 2.75);
+    tl.fromTo(fresh, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.08 }, 2.95);`,
+  }),
+
+  // your colors, then your pictures: the same inbox in blue, pink and green, then over three photos
+  looks: () => screen("looks", 6.6, {
+    bg: "#1f4fd6",
+    css: `  html.qm {
+    --qm-bgimg: none; --qm-bgdim: 0.36;
+    --qm-halo: 0 0 1px rgba(15, 16, 18, .5), 0 1px 3px rgba(15, 16, 18, .7), 0 0 16px rgba(15, 16, 18, .7), 0 0 34px rgba(15, 16, 18, .4);
+    --qm-halo-icon: drop-shadow(0 1px 2px rgba(15, 16, 18, .8)) drop-shadow(0 0 8px rgba(15, 16, 18, .6));
+  }
+  .pic { position: absolute; inset: 0; z-index: -2; background-size: cover; background-position: 50% 50%; opacity: 0; }`,
+    body: inbox(5).replace('<div id="qm-view">', '<div id="qm-view"><div class="pic" style="background-image:url(../assets/photos/mountains.jpg)"></div><div class="pic" style="background-image:url(../assets/photos/sunset.jpg);background-position:50% 62%"></div><div class="pic" style="background-image:url(../assets/photos/sea.jpg)"></div>'),
+    script: `
+    const R = document.documentElement, pics = $$(".pic");
+    const to = (c, rgb, t, d = 0.45) => tl.to(R, { "--bg": c, "--bg-rgb": rgb, duration: d, ease: "sine.inOut" }, t);
+    to("#cc1f66", "204, 31, 102", 0.55);
+    to("#0f8f4a", "15, 143, 74", 1.3);
+    // your own picture: the first fades in as the page goes dark behind it, the next ones wipe in from the right
+    tl.set(R, { attr: { class: "qm qm-v-list qm-spacious qm-bgimg qm-halo qm-halo-read" } }, 2.1);
+    tl.fromTo(pics[0], { opacity: 0, scale: 1.08 }, { opacity: 1, scale: 1, duration: 0.8, ease: "power2.out" }, 2.1);
+    to("#0f1012", "15, 16, 18", 2.1, 0.6);
+    for (const [i, t] of [[1, 3.55], [2, 5.0]]) {
+      tl.set(pics[i], { opacity: 1 }, t);
+      tl.fromTo(pics[i], { clipPath: "inset(0% 0% 0% 100%)", scale: 1.06 }, { clipPath: "inset(0% 0% 0% 0%)", scale: 1, duration: 0.9, ease: "power3.inOut" }, t);
+    }`,
+  }),
 
   // the paper: newsletters, one page, read like one
   paper: () => {
@@ -236,19 +295,34 @@ const SCREENS = {
     tl.fromTo(".qm-paper", { y: 0 }, { y: -230, duration: 3.4, ease: "sine.inOut" }, 1.6);`,
     });
   },
-
-  // your colors: the same inbox in blue, pink, green, and violet
-  colors: () => screen("colors", 5.2, {
-    bg: "#1f4fd6",
-    body: inbox(5),
-    script: `
-    const R = document.documentElement;
-    const to = (c, t) => tl.to(R, { "--bg": c[0], "--bg-rgb": c[1], duration: 0.7, ease: "sine.inOut" }, t);
-    to(["#cc1f66", "204, 31, 102"], 0.7);
-    to(["#0f8f4a", "15, 143, 74"], 1.9);
-    to(["#6a3fd8", "106, 63, 216"], 3.1);`,
-  }),
 };
+
+/* ---- the photos (Unsplash License; see the top of this file) */
+const PHOTOS = { mountains: "1552152370-fb05b25ff17d", sunset: "1554213808-9c5bab0f624e", sea: "1707489636403-c539c2cdc101" };
+async function getPhotos() {
+  mkdirSync(at("./assets/photos/"), { recursive: true });
+  for (const [name, id] of Object.entries(PHOTOS)) {
+    const r = await fetch(`https://images.unsplash.com/photo-${id}?w=2560&q=86&fm=jpg`);
+    if (!r.ok) throw new Error("couldn't fetch " + name + ": " + r.status);
+    writeFileSync(at(`./assets/photos/${name}.jpg`), Buffer.from(await r.arrayBuffer()));
+    console.log("  assets/photos/" + name + ".jpg");
+  }
+}
+
+/* ---- the backdrop's grain: soft grey noise, 512 × 512, tileable (a seeded generator: the same every time) */
+function writeGrain() {
+  const N = 512, crc = (b) => { let c = -1; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; } return (c ^ -1) >>> 0; };
+  const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
+  let seed = 3;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const raw = Buffer.alloc((N + 1) * N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const g = Math.sqrt(-2 * Math.log(rand() || 1e-9)) * Math.cos(2 * Math.PI * rand());
+    raw[y * (N + 1) + 1 + x] = Math.max(0, Math.min(255, Math.round(128 + 38 * g)));
+  }
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(N, 0); ihdr.writeUInt32BE(N, 4); ihdr[8] = 8; ihdr[9] = 0;
+  writeFileSync(at("./assets/grain.png"), Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]));
+}
 
 /* ---- write: Umbra's stylesheet and fonts, and the screens */
 function writeUI() {
@@ -256,6 +330,7 @@ function writeUI() {
   mkdirSync(at("./ui/"), { recursive: true });
   writeFileSync(at("./assets/umbra.css"), readFileSync(SITE + "umbra.css", "utf8").split('url("/fonts/').join('url("fonts/'));
   for (const f of readdirSync(SITE + "fonts/")) if (f.endsWith(".woff2")) copyFileSync(SITE + "fonts/" + f, at("./assets/fonts/" + f));
+  writeGrain();
   for (const [id, make] of Object.entries(SCREENS)) { writeFileSync(at(`./ui/${id}.html`), make()); console.log("  ui/" + id + ".html"); }
 }
 
@@ -265,15 +340,21 @@ function renderClips(only) {
   mkdirSync(at("./renders/"), { recursive: true });
   for (const id of Object.keys(SCREENS)) {
     if (only.length && !only.includes(id)) continue;
-    const big = at(`./renders/ui-${id}.mp4`);
-    execFileSync("npx", ["--yes", HF, "render", "-c", `ui/${id}.html`, "--resolution", "landscape-4k", "--fps", String(FPS), "--quality", "delivery", "-o", big, "--quiet"], { cwd: at("./"), stdio: "inherit" });
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", big, "-vf", "scale=1536:864:flags=lanczos", "-c:v", "libx264", "-crf", "12", "-preset", "slow", "-g", "30", "-keyint_min", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", at(`./assets/clips/${id}.mp4`)]);
-    console.log("  assets/clips/" + id + ".mp4");
+    const alpha = id.endsWith("-lift");
+    const big = at(`./renders/ui-${id}.${alpha ? "webm" : "mp4"}`);
+    execFileSync("npx", ["--yes", HF, "render", "-c", `ui/${id}.html`, "--resolution", "landscape-4k", "--fps", String(FPS), "--quality", "delivery", ...(alpha ? ["--format", "webm"] : []), "-o", big, "--quiet"], { cwd: at("./"), stdio: "inherit" });
+    const out = at(`./assets/clips/${id}.${alpha ? "webm" : "mp4"}`);
+    const enc = alpha
+      ? ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0", "-crf", "18", "-auto-alt-ref", "0", "-g", "30"]
+      : ["-c:v", "libx264", "-crf", "12", "-preset", "slow", "-g", "30", "-keyint_min", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart"];
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...(alpha ? ["-c:v", "libvpx-vp9"] : []), "-i", big, "-vf", "scale=2560:1440:flags=lanczos", ...enc, "-an", out]);
+    console.log("  assets/clips/" + id + (alpha ? ".webm" : ".mp4"));
   }
 }
 
 const [what, ...rest] = process.argv.slice(2);
 if (!existsSync(SITE + "umbra.css")) { console.error("Build Umbra first: npm run build"); process.exit(1); }
 if (what === "ui" || what === "all") writeUI();
+if (what === "photos" || what === "all") await getPhotos();
 if (what === "clips" || what === "all") renderClips(rest);
-if (!["ui", "clips", "all"].includes(what)) console.log("node make.mjs ui | clips [screen…] | all");
+if (!["ui", "photos", "clips", "all"].includes(what)) console.log("node make.mjs ui | photos | clips [screen…] | all");

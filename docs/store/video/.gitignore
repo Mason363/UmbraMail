@@ -2,3 +2,4 @@ assets/
 ui/
 renders/
 snapshots/
+.transcode-cache/

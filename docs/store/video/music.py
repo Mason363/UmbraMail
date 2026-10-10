@@ -6,7 +6,7 @@ from scipy.io import wavfile
 from scipy.signal import fftconvolve, butter, sosfilt
 
 SR = 48000
-LENGTH = 34.0
+LENGTH = 41.0
 rng = np.random.default_rng(7)
 N = int(SR * LENGTH)
 t_all = np.arange(N) / SR
@@ -19,17 +19,19 @@ def hz(note):
 # where the scenes change (index.html): the chords change with them
 CHORDS = [
     (0.0, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),      # Dmaj9: the name
-    (3.2, "G2", ["B3", "D4", "F#4", "A4"]),             # Gmaj9: the inbox
-    (6.1, "E2", ["G3", "D4", "F#4", "B4"]),             # Em9
-    (9.0, "B1", ["A3", "D4", "F#4", "C#5"]),            # Bm9: a conversation
-    (12.4, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj7
-    (15.8, "F#2", ["A3", "D4", "F#4", "E5"]),           # D/F#: ⌘K
-    (18.1, "E2", ["G3", "B3", "D4", "F#4"]),            # Em9
-    (20.4, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: the paper
-    (22.7, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
-    (25.0, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: colors
-    (27.5, "G2", ["B3", "D4", "F#4", "C#5"]),           # Gmaj7#11
-    (30.0, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the end, and rest
+    (2.8, "G2", ["B3", "D4", "F#4", "A4"]),             # Gmaj9: the inbox
+    (5.75, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9
+    (8.7, "B1", ["A3", "D4", "F#4", "C#5"]),            # Bm9: the tide
+    (11.5, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj7
+    (13.8, "F#2", ["A3", "D4", "F#4", "E5"]),           # D/F#: a conversation
+    (17.5, "E2", ["G3", "B3", "D4", "F#4"]),            # Em9
+    (20.7, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: finding
+    (23.3, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (25.4, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: the paper
+    (28.0, "G2", ["B3", "D4", "F#4", "C#5"]),           # Gmaj7#11
+    (30.1, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9: colors and pictures
+    (33.4, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (36.2, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the end, and rest
 ]
 ends = [c[0] for c in CHORDS[1:]] + [LENGTH]
 
@@ -95,10 +97,25 @@ for (start, bass, notes), end in zip(CHORDS, ends):
         place(ep(hz(nm), 1.0 - i * 0.08), start + 0.02 + i * 0.045, pan=-0.35 + i * 0.18)
 
 # a few quiet notes on top, from the scale, between the chords
-MELODY = [(4.4, "F#5"), (5.3, "A5"), (7.4, "B5"), (10.2, "C#6"), (11.2, "A5"), (13.6, "F#5"), (16.9, "E5"), (17.6, "F#5"),
-          (19.2, "B5"), (21.5, "A5"), (23.8, "E5"), (26.2, "F#5"), (26.9, "C#6"), (28.7, "B5"), (31.2, "A5"), (32.0, "F#5")]
+MELODY = [(4.0, "F#5"), (4.9, "A5"), (7.2, "B5"), (10.1, "C#6"), (11.0, "A5"), (12.9, "F#5"), (15.2, "E5"), (15.9, "F#5"),
+          (18.8, "B5"), (21.9, "A5"), (24.4, "E5"), (26.6, "F#5"), (27.3, "C#6"), (29.2, "B5"), (31.5, "A5"), (32.3, "B5"),
+          (34.6, "C#6"), (37.4, "A5"), (38.3, "F#5")]
 for when, nm in MELODY:
     place(ep(hz(nm), 0.62, 3.6), when, pan=0.25, gain=1.0)
+
+# ---- a soft arpeggio through each chord (eighth notes, 92 a minute), from the inbox until the end card
+step = 60 / 92 / 2
+t = 2.8
+k = 0
+while t < 36.2 - 0.05:
+    chord = [c for c in CHORDS if c[0] <= t + 1e-6][-1]
+    tones = chord[2][1:4] + [chord[2][2]]
+    nm = tones[k % len(tones)]
+    f = hz(nm) * 2
+    accent = 1.0 if k % 4 == 0 else 0.72
+    place(ep(f, 0.3 * accent, 1.4), t, pan=0.5 * np.sin(k * 0.7), gain=1.0)
+    t += step
+    k += 1
 
 # ---- a chime as each scene arrives: two high partials, very soft
 def chime(f):
@@ -107,7 +124,7 @@ def chime(f):
     s = np.sin(2 * np.pi * f * t) + 0.35 * np.sin(2 * np.pi * f * 2.76 * t) * np.exp(-t * 3)
     return s * np.minimum(1, t / 0.006) * np.exp(-t * 1.6) * 0.035
 
-for when, nm in [(3.2, "A6"), (9.0, "F#6"), (15.8, "A6"), (20.4, "B6"), (25.0, "F#6"), (30.0, "A6")]:
+for when, nm in [(2.8, "A6"), (8.7, "F#6"), (13.8, "A6"), (20.7, "B6"), (25.4, "F#6"), (30.1, "A6"), (36.2, "A6")]:
     place(chime(hz(nm)), when, pan=0.4)
 
 # ---- the room: a long, dark, wide reverb

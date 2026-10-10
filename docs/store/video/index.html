@@ -10,102 +10,177 @@
   @font-face { font-family: "Newsreader"; font-weight: 200 800; src: url("assets/fonts/newsreader-latin-opsz-normal.woff2") format("woff2"); }
   @font-face { font-family: "Instrument Sans"; font-weight: 400 700; src: url("assets/fonts/instrument-sans-latin-wght-normal.woff2") format("woff2"); }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #0b0b0d; }
-  #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #0b0b0d; color: #f3f2ef; -webkit-font-smoothing: antialiased; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #09090b; }
+  #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #09090b; color: #f3f2ef; -webkit-font-smoothing: antialiased; }
 
-  /* the words: the name, and one line under each screen */
+  /* the light around the window: the screen itself, blurred and spilled onto the dark */
+  .amb { position: absolute; left: 580px; top: 186px; width: 1260px; height: 709px; transform: scale(1.32); filter: blur(90px) saturate(1.5); opacity: 0.6; }
+  .amb video { position: absolute; inset: 0; width: 1260px; height: 709px; display: block; }
+  .grain { position: absolute; inset: 0; background: url("assets/grain.png") repeat; opacity: 0.05; mix-blend-mode: overlay; }
+
+  /* the window: a tilt for arriving and leaving, a float for breathing, a frame that clips, a view the camera moves */
+  .stage { position: absolute; inset: 0; perspective: 2400px; perspective-origin: 63% 50%; }
+  .tilt { position: absolute; left: 580px; top: 186px; width: 1260px; height: 709px; transform-style: preserve-3d; }
+  .float { position: absolute; inset: 0; transform-style: preserve-3d; }
+  .frame { position: absolute; inset: 0; border-radius: 20px; overflow: hidden; background: #09090b; box-shadow: 0 60px 160px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.08); }
+  .view { position: absolute; left: 0; top: 0; width: 1260px; height: 709px; }
+  .view video { position: absolute; inset: 0; width: 1260px; height: 709px; display: block; }
+  /* the ⌘K bar on its own layer, so it can rise off the window */
+  .lift { position: absolute; inset: 0; }
+  .lift video { position: absolute; inset: 0; width: 1260px; height: 709px; display: block; }
+
+  /* the words: a line beside the window for each screen, rising word by word */
+  .hl { position: absolute; left: 100px; top: 0; bottom: 0; width: 460px; display: flex; align-items: center; }
+  .hl p { font: 380 60px/1.1 "Newsreader", Georgia, serif; letter-spacing: -0.022em; color: #f3f2ef; }
+  .ln { display: block; white-space: nowrap; }
+  .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.14em; margin-bottom: -0.14em; }
+  .i { display: inline-block; }
   .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-  .name { display: block; font: 380 168px/1 "Newsreader", Georgia, serif; letter-spacing: -0.03em; }
-  .tag { display: block; margin-top: 26px; font: 400 40px/1.3 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.8); }
-  .small { display: block; margin-top: 46px; font: 400 26px/1.5 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.56); }
-  .cap { position: absolute; left: 0; right: 0; top: 944px; height: 80px; display: flex; align-items: center; justify-content: center; }
-  .cap span { display: block; font: 400 32px/1.3 "Instrument Sans", system-ui, sans-serif; letter-spacing: -0.005em; color: rgba(243, 242, 239, 0.86); }
-
-  /* the window Umbra plays in, on a soft glow of its own color */
-  .glow { position: absolute; left: 260px; top: 150px; width: 1400px; height: 700px; border-radius: 50%; background: #1f4fd6; filter: blur(150px); opacity: 0; }
-  .cam { position: absolute; left: 192px; top: 48px; width: 1536px; height: 864px; opacity: 0; }
-  .frame { position: absolute; inset: 0; border-radius: 20px; overflow: hidden; background: #0b0b0d; box-shadow: 0 50px 140px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.07); }
-  .frame video { position: absolute; inset: 0; width: 1536px; height: 864px; display: block; }
+  .name { display: block; font: 380 176px/1 "Newsreader", Georgia, serif; letter-spacing: -0.03em; }
+  .tag { display: block; margin-top: 28px; font: 400 40px/1.3 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.8); }
+  .small { display: block; margin-top: 48px; font: 400 26px/1.5 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.55); }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="34" data-width="1920" data-height="1080">
+<div id="root" data-composition-id="main" data-start="0" data-duration="41" data-width="1920" data-height="1080">
 
-  <section id="title" class="clip card" data-start="0" data-duration="3.6" data-track-index="0">
+  <div class="amb" id="amb">
+    <video id="a-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="2.8" data-duration="6.4" data-track-index="1"></video>
+    <video id="a-tides" class="clip" src="assets/clips/tides.mp4" muted playsinline data-start="8.7" data-duration="5.6" data-track-index="2"></video>
+    <video id="a-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="13.8" data-duration="7.4" data-track-index="1"></video>
+    <video id="a-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="20.7" data-duration="5.2" data-track-index="2"></video>
+    <video id="a-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="25.4" data-duration="5.2" data-track-index="1"></video>
+    <video id="a-looks" class="clip" src="assets/clips/looks.mp4" muted playsinline data-start="30.1" data-duration="6.6" data-track-index="2"></video>
+  </div>
+  <div class="grain" id="grain"></div>
+
+  <div class="stage"><div class="tilt" id="tilt"><div class="float" id="float">
+    <div class="frame"><div class="view" id="view">
+      <video id="v-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="2.8" data-duration="6.4" data-track-index="3"></video>
+      <video id="v-tides" class="clip" src="assets/clips/tides.mp4" muted playsinline data-start="8.7" data-duration="5.6" data-track-index="4"></video>
+      <video id="v-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="13.8" data-duration="7.4" data-track-index="3"></video>
+      <video id="v-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="20.7" data-duration="5.2" data-track-index="4"></video>
+      <video id="v-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="25.4" data-duration="5.2" data-track-index="3"></video>
+      <video id="v-looks" class="clip" src="assets/clips/looks.mp4" muted playsinline data-start="30.1" data-duration="6.6" data-track-index="4"></video>
+    </div></div>
+    <div class="lift" id="lift"><video id="v-lift" class="clip" src="assets/clips/palette-lift.webm" muted playsinline data-start="20.7" data-duration="5.2" data-track-index="5"></video></div>
+  </div></div></div>
+
+  <section id="h1" class="clip hl" data-start="3.3" data-duration="5.8" data-track-index="6"><p><span class="ln">What needs you,</span><span class="ln">at the top.</span></p></section>
+  <section id="h2" class="clip hl" data-start="8.85" data-duration="5.3" data-track-index="7"><p><span class="ln">New mail,</span><span class="ln">a few times a day.</span></p></section>
+  <section id="h3" class="clip hl" data-start="14.05" data-duration="6.95" data-track-index="6"><p><span class="ln">Email that reads</span><span class="ln">like messages.</span></p></section>
+  <section id="h4" class="clip hl" data-start="20.9" data-duration="4.75" data-track-index="7"><p><span class="ln">Find any email</span><span class="ln">in a few letters.</span></p></section>
+  <section id="h5" class="clip hl" data-start="25.65" data-duration="4.75" data-track-index="6"><p><span class="ln">Newsletters,</span><span class="ln">in one page.</span></p></section>
+  <section id="h6" class="clip hl" data-start="30.35" data-duration="6.2" data-track-index="7"><p><span class="ln">Your colors.</span><span class="ln">Your pictures.</span></p></section>
+
+  <section id="title" class="clip card" data-start="0" data-duration="3.2" data-track-index="0">
     <span class="name" id="t-name">Umbra</span>
     <span class="tag" id="t-tag">A calmer Gmail.</span>
   </section>
-
-  <div class="glow" id="glow"></div>
-  <div class="cam" id="cam">
-    <div class="frame" id="frame">
-      <video id="v-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="3.2" data-duration="6.4" data-track-index="1"></video>
-      <video id="v-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="9.0" data-duration="7.4" data-track-index="2"></video>
-      <video id="v-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="15.8" data-duration="5.2" data-track-index="1"></video>
-      <video id="v-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="20.4" data-duration="5.2" data-track-index="2"></video>
-      <video id="v-colors" class="clip" src="assets/clips/colors.mp4" muted playsinline data-start="25.0" data-duration="5.2" data-track-index="1"></video>
-    </div>
-  </div>
-
-  <div id="c1" class="clip cap" data-start="3.9" data-duration="5.1" data-track-index="3"><span>Your inbox, quiet and easy to read.</span></div>
-  <div id="c2" class="clip cap" data-start="9.6" data-duration="6.1" data-track-index="3"><span>Every conversation, easy to follow.</span></div>
-  <div id="c3" class="clip cap" data-start="16.4" data-duration="3.9" data-track-index="3"><span>⌘K does almost anything.</span></div>
-  <div id="c4" class="clip cap" data-start="21.0" data-duration="3.9" data-track-index="3"><span>Newsletters in one page.</span></div>
-  <div id="c5" class="clip cap" data-start="25.6" data-duration="3.9" data-track-index="3"><span>Any color you like.</span></div>
-
-  <section id="end" class="clip card" data-start="29.9" data-duration="4.1" data-track-index="0">
+  <section id="end" class="clip card" data-start="36.4" data-duration="4.6" data-track-index="0">
     <span class="name" id="e-name">Umbra</span>
     <span class="tag" id="e-tag">A calmer Gmail.</span>
     <span class="small" id="e-small">Private, free and open source · umbra.masn.studio</span>
   </section>
 
-  <audio id="bed" src="assets/bed.wav" data-start="0" data-duration="34" data-track-index="4" data-volume="1"></audio>
+  <audio id="bed" src="assets/bed.wav" data-start="0" data-duration="41" data-track-index="8" data-volume="1"></audio>
 </div>
 <script>
+  // words and letters, each in a mask it rises out of
+  const masked = (el, by) => {
+    const wrap = (t) => (by === "letter" ? [...t] : t.split(" ")).map((p) => `<span class="w" data-layout-allow-overflow><span class="i">${p === " " ? "&nbsp;" : p}</span></span>`).join(by === "letter" ? "" : " ");
+    const lines = [...el.querySelectorAll(".ln")];
+    if (lines.length) lines.forEach((l) => { l.innerHTML = wrap(l.textContent); });
+    else el.innerHTML = wrap(el.textContent);
+    return [...el.querySelectorAll(".i")];
+  };
   document.fonts.ready.then(() => {
     const tl = gsap.timeline({ paused: true });
-    const rise = (el, t, d = 1.4) => tl.fromTo(el, { opacity: 0, y: 18, filter: "blur(14px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: d, ease: "power3.out" }, t);
-    const sink = (el, t) => tl.to(el, { opacity: 0, y: -10, filter: "blur(8px)", duration: 0.6, ease: "power2.in" }, t);
+    const rise = (els, t, stagger = 0.06, d = 0.9) => tl.fromTo(els, { yPercent: 110, opacity: 0, filter: "blur(8px)" }, { yPercent: 0, opacity: 1, filter: "blur(0px)", duration: d, ease: "power3.out", stagger }, t);
+    const leave = (els, t, stagger = 0.03) => tl.to(els, { yPercent: -110, opacity: 0, filter: "blur(6px)", duration: 0.45, ease: "power2.in", stagger }, t);
 
-    // the name
-    rise("#t-name", 0.3, 1.5);
-    rise("#t-tag", 0.95, 1.2);
-    sink(["#t-name", "#t-tag"], 2.85);
+    // ---- the name
+    const tName = masked(document.getElementById("t-name"), "letter"), tTag = masked(document.getElementById("t-tag"));
+    rise(tName, 0.25, 0.055, 1.1);
+    rise(tTag, 0.95, 0.07);
+    leave([...tName, ...tTag], 2.4, 0.02);
 
-    // the window comes up, drifts closer as it plays, and goes before the end
-    tl.fromTo("#cam", { opacity: 0, y: 50, scale: 0.955 }, { opacity: 1, y: 0, scale: 1, duration: 1.2, ease: "power3.out" }, 3.1);
-    tl.fromTo("#frame", { scale: 1 }, { scale: 1.025, duration: 26.4, ease: "none" }, 3.1);
-    tl.to("#cam", { opacity: 0, y: -16, scale: 0.975, duration: 0.8, ease: "power2.inOut" }, 29.3);
+    // ---- the window arrives tilted out of the dark and settles; its light comes with it
+    tl.fromTo("#tilt", { rotationX: 24, rotationY: -18, x: 140, y: 240, scale: 0.84, opacity: 0 }, { rotationX: 0, rotationY: 0, x: 0, y: 0, scale: 1, opacity: 1, duration: 1.6, ease: "power3.out" }, 2.6);
+    tl.fromTo("#amb", { opacity: 0 }, { opacity: 0.6, duration: 1.8, ease: "sine.out" }, 2.8);
+    // and breathes while it plays (a slow sway, never still, never busy)
+    tl.fromTo("#float", { rotationY: 0, y: 0 }, { rotationY: -1.6, y: -6, duration: 4.2, ease: "sine.inOut", yoyo: true, repeat: 7 }, 4.2);
+    tl.fromTo("#grain", { backgroundPosition: "0px 0px" }, { backgroundPosition: "512px 384px", duration: 41, ease: "steps(240)" }, 0);
 
-    // each screen softens as the next comes into focus over it (a blur dissolve: never two sharp layouts at once)
-    for (const [out, id, t] of [["#v-inbox", "#v-convo", 9.0], ["#v-convo", "#v-palette", 15.8], ["#v-palette", "#v-paper", 20.4], ["#v-paper", "#v-colors", 25.0]]) {
-      tl.fromTo(out, { filter: "blur(0px)" }, { filter: "blur(18px)", duration: 0.6, ease: "sine.in" }, t);
-      tl.fromTo(id, { opacity: 0, filter: "blur(18px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "sine.out" }, t);
+    // ---- the camera inside the window: a point of the screen (in Umbra's 1280 × 720) brought to a point of the window
+    const W = 1260, H = 709, S = W / 1280;
+    tl.set("#view", { x: 0, y: 0, scale: 1, transformOrigin: "0 0" }, 0);
+    const look = (t, d, z, ux, uy, tx, ty, ease = "power2.inOut") => {
+      let x = tx - z * ux * S, y = ty - z * uy * S;
+      x = Math.min(0, Math.max(W - z * W, x));
+      y = Math.min(0, Math.max(H - z * H, y));
+      tl.to("#view", { x, y, scale: z, duration: d, ease }, t);
+    };
+    const home = (t, d, ease = "power2.inOut") => tl.to("#view", { x: 0, y: 0, scale: 1, duration: d, ease }, t);
+
+    // ---- one screen softening into the next (the window, and the light it casts)
+    const swap = (from, to, t, d = 0.6) => {
+      tl.fromTo("#v-" + from, { filter: "blur(0px)" }, { filter: "blur(18px)", duration: d, ease: "sine.in" }, t);
+      tl.fromTo("#v-" + to, { opacity: 0, filter: "blur(18px)" }, { opacity: 1, filter: "blur(0px)", duration: d, ease: "sine.out" }, t);
+      tl.fromTo("#a-" + to, { opacity: 0 }, { opacity: 1, duration: d, ease: "sine.inOut" }, t);
+    };
+    const line = (id, tin, tout) => { const ws = masked(document.querySelector(id + " p")); rise(ws, tin); leave(ws, tout); };
+
+    // 1. what needs you: the camera leans in on the two lines at the top, then back as one email is done
+    line("#h1", 3.4, 8.45);
+    look(4.5, 1.2, 1.3, 640, 160, 630, 230);
+    home(6.0, 1.1);
+
+    // 2. the tide: in on the pill, the button gives, back out as the four arrive together
+    swap("inbox", "tides", 8.7);
+    line("#h2", 8.95, 13.4);
+    look(9.6, 1.0, 1.6, 356, 264, 520, 330);
+    home(11.15, 1.0);
+
+    // 3. into Lena's email: the camera goes through her row and comes out in the conversation
+    look(13.2, 0.8, 1.4, 420, 352, 560, 330, "power2.in");
+    swap("tides", "convo", 13.8, 0.5);
+    home(14.05, 1.1, "power3.out");
+    line("#h3", 14.15, 20.3);
+    look(15.4, 1.0, 1.3, 640, 650, 630, 560);
+    home(18.35, 1.0);
+
+    // 4. finding: the bar rises off the window, the inbox falls out of focus behind it
+    swap("convo", "palette", 20.7);
+    line("#h4", 21.0, 25.0);
+    tl.set("#lift", { transformOrigin: "630px 202px", scale: 1, y: 0, filter: "drop-shadow(0px 0px 0px rgba(0,0,0,0))" }, 0);
+    tl.to("#lift", { scale: 1.13, y: -18, filter: "drop-shadow(0px 44px 70px rgba(0,0,0,0.55))", duration: 0.75, ease: "power3.out" }, 21.65);
+    tl.fromTo("#view", { filter: "blur(0px) brightness(1)" }, { filter: "blur(5px) brightness(0.82)", duration: 0.75, ease: "power2.out" }, 21.65);
+    tl.to("#lift", { scale: 1, y: 0, filter: "drop-shadow(0px 0px 0px rgba(0,0,0,0))", duration: 0.55, ease: "power2.inOut" }, 24.75);
+    tl.to("#view", { filter: "blur(0px) brightness(1)", duration: 0.55, ease: "power2.inOut" }, 24.75);
+    tl.to("#v-lift", { opacity: 0, duration: 0.25 }, 25.3);
+
+    // 5. the paper: a slow lean in as it scrolls
+    swap("palette", "paper", 25.4);
+    line("#h5", 25.75, 29.75);
+    look(25.8, 4.4, 1.08, 640, 330, 630, 340, "sine.inOut");
+    home(29.9, 0.6);
+
+    // 6. colors, then pictures: the window answers each change with the smallest pulse
+    swap("paper", "looks", 30.1);
+    line("#h6", 30.45, 35.85);
+    for (const t of [30.65, 31.4, 32.2, 33.65, 35.1]) {
+      tl.to("#tilt", { scale: 1.014, duration: 0.18, ease: "power2.out" }, t);
+      tl.to("#tilt", { scale: 1, duration: 0.5, ease: "power2.inOut" }, t + 0.18);
     }
 
-    // the glow takes each screen's color
-    tl.fromTo("#glow", { opacity: 0 }, { opacity: 0.5, duration: 1.4, ease: "sine.out" }, 3.1);
-    const hue = (c, t, d = 0.8, o) => tl.to("#glow", Object.assign({ backgroundColor: c, duration: d, ease: "sine.inOut" }, o == null ? {} : { opacity: o }), t);
-    hue("#cc1f66", 9.0);
-    hue("#0f8f4a", 15.8);
-    hue("#3b4252", 20.4, 0.8, 0.32);
-    hue("#1f4fd6", 25.0, 0.6, 0.5);
-    hue("#cc1f66", 25.7, 0.7);
-    hue("#0f8f4a", 26.9, 0.7);
-    hue("#6a3fd8", 28.1, 0.7);
-    tl.to("#glow", { opacity: 0, duration: 0.9, ease: "sine.inOut" }, 29.3);
-
-    // a line under each screen
-    for (const [id, t, d] of [["#c1", 3.9, 5.1], ["#c2", 9.6, 6.1], ["#c3", 16.4, 3.9], ["#c4", 21.0, 3.9], ["#c5", 25.6, 3.9]]) {
-      tl.fromTo(id + " span", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, t + 0.05);
-      tl.to(id + " span", { opacity: 0, duration: 0.4, ease: "power2.in" }, t + d - 0.45);
-    }
-
-    // the name again, and where to get it
-    rise("#e-name", 30.15, 1.5);
-    rise("#e-tag", 30.75, 1.2);
-    rise("#e-small", 31.35, 1.2);
-    tl.to(["#e-name", "#e-tag", "#e-small"], { opacity: 0, duration: 0.7, ease: "sine.in" }, 33.25);
+    // ---- the window goes back into the dark, and the name returns
+    tl.to("#tilt", { rotationX: -10, y: 90, scale: 0.9, opacity: 0, duration: 1.0, ease: "power2.in" }, 36.0);
+    tl.to("#amb", { opacity: 0, duration: 1.0, ease: "sine.in" }, 36.0);
+    rise(masked(document.getElementById("e-name"), "letter"), 36.9, 0.055, 1.1);
+    rise(masked(document.getElementById("e-tag")), 37.6, 0.07);
+    rise(masked(document.getElementById("e-small")), 38.2, 0.03);
+    tl.to("#end", { opacity: 0, duration: 0.7, ease: "sine.in" }, 40.3);
 
     window.__timelines["main"] = tl;
   });
