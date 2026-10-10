@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "npx --yes hyperframes@0.8.143 preview",
     "check": "npx --yes hyperframes@0.8.143 check",
-    "render": "npx --yes hyperframes@0.8.143 render",
+    "render": "HF_STATIC_DEDUP=false npx --yes hyperframes@0.8.143 render --fps 60 --quality delivery --video-frame-format png -o renders/umbra-demo.mp4",
     "publish": "npx --yes hyperframes@0.8.143 publish"
   }
 }

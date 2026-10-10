@@ -13,208 +13,124 @@
   html, body { width: 1920px; height: 1080px; overflow: hidden; background: #09090b; }
   #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #09090b; color: #f3f2ef; -webkit-font-smoothing: antialiased; }
 
-  /* the light each screen casts on the dark: the screen itself, blurred (and, for the gallery, its color) */
-  .amb { position: absolute; left: 610px; top: 197px; width: 1220px; height: 686px; transform: scale(1.3); filter: blur(90px) saturate(1.5); opacity: 0.55; }
+  /* the light each screen casts on the dark around it: the screen itself (a small copy), blurred */
+  .amb { position: absolute; left: 610px; top: 197px; width: 1220px; height: 686px; transform: scale(1.3); filter: blur(90px) saturate(1.4); opacity: 0; }
   .amb video { position: absolute; inset: 0; width: 1220px; height: 686px; display: block; opacity: 0; }
-  .glow { position: absolute; left: 360px; top: 260px; width: 1200px; height: 620px; border-radius: 50%; background: #1f4fd6; filter: blur(150px); opacity: 0; }
-  .grain { position: absolute; inset: 0; background: url("assets/grain.png") repeat; opacity: 0.05; mix-blend-mode: overlay; }
 
-  /* screens are cards in a 3D stage: they travel, turn and recede; nothing zooms */
-  /* (each screen keeps its own 3D: two screens passing never cut through each other, the later one goes over) */
-  .stage { position: absolute; inset: 0; perspective: 2200px; perspective-origin: 60% 50%; }
-  .card { position: absolute; left: 610px; top: 197px; width: 1220px; height: 686px; transform-style: preserve-3d; opacity: 0; }
-  .face { position: absolute; inset: 0; border-radius: 20px; overflow: hidden; background: #09090b;
-    box-shadow: 0 60px 140px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    -webkit-box-reflect: below 14px linear-gradient(transparent 76%, rgba(255, 255, 255, 0.13)); }
-  .face video { position: absolute; inset: 0; width: 1220px; height: 686px; display: block; }
-  /* light passing over the glass as a screen arrives */
-  .sheen { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.16) 50%, transparent 62%) no-repeat; background-size: 260% 100%; background-position: 130% 0; mix-blend-mode: screen; pointer-events: none; }
-  /* one part of a screen, on its own layer, so it can rise off it */
-  .lift { position: absolute; inset: 0; }
-  .lift video { position: absolute; inset: 0; width: 1220px; height: 686px; display: block; }
-
-  /* the gallery of looks: six screens on a rail that flows past */
-  .deck { position: absolute; inset: 0; perspective: 2200px; perspective-origin: 50% 52%; }
-  .dcard { position: absolute; left: 0; top: 330px; width: 800px; height: 450px; border-radius: 16px; overflow: hidden; opacity: 0;
-    box-shadow: 0 40px 110px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    -webkit-box-reflect: below 12px linear-gradient(transparent 74%, rgba(255, 255, 255, 0.12)); }
-  .dcard img { width: 800px; height: 450px; display: block; }
+  /* one window, flat; each screen a layer in it, revealed over the last */
+  .win { position: absolute; left: 610px; top: 197px; width: 1220px; height: 686px; border-radius: 20px; overflow: hidden; background: #09090b; opacity: 0;
+    box-shadow: 0 50px 120px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08); }
+  .scr { position: absolute; inset: 0; }
+  .scr video { position: absolute; inset: 0; width: 1220px; height: 686px; display: block; }
 
   /* the words: a line beside each screen, rising word by word out of a mask */
   .hl { position: absolute; left: 100px; top: 0; bottom: 0; width: 470px; display: flex; align-items: center; }
-  .hl.top { left: 0; right: 0; width: auto; top: 118px; bottom: auto; justify-content: center; }
   .hl p { font: 380 60px/1.1 "Newsreader", Georgia, serif; letter-spacing: -0.022em; color: #f3f2ef; }
   .ln { display: block; white-space: nowrap; }
-  .top .ln { display: inline; }
   .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.14em; margin-bottom: -0.14em; }
   .i { display: inline-block; }
-  .card-t { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
   .name { display: block; font: 380 176px/1 "Newsreader", Georgia, serif; letter-spacing: -0.03em; }
   .tag { display: block; margin-top: 28px; font: 400 40px/1.3 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.8); }
   .small { display: block; margin-top: 48px; font: 400 26px/1.5 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.55); }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="44" data-width="1920" data-height="1080">
+<div id="root" data-composition-id="main" data-start="0" data-duration="44" data-fps="60" data-width="1920" data-height="1080">
 
   <div class="amb" id="amb">
-    <video id="a-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="2.6" data-duration="7.6" data-track-index="1"></video>
-    <video id="a-tides" class="clip" src="assets/clips/tides.mp4" muted playsinline data-start="9.3" data-duration="6.6" data-track-index="2"></video>
-    <video id="a-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="15.0" data-duration="8.0" data-track-index="1"></video>
-    <video id="a-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="22.1" data-duration="5.8" data-track-index="2"></video>
-    <video id="a-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="27.0" data-duration="5.8" data-track-index="1"></video>
-  </div>
-  <div class="glow" id="glow"></div>
-  <div class="grain" id="grain"></div>
-
-  <div class="stage">
-    <div class="card" id="c-inbox"><div class="face" id="f-inbox"><video id="v-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="2.6" data-duration="7.6" data-track-index="3"></video><div class="sheen"></div></div>
-      <div class="lift" id="l-inbox"><video id="v-inbox-lift" class="clip" src="assets/clips/inbox-lift.webm" muted playsinline data-start="2.6" data-duration="7.6" data-track-index="4"></video></div></div>
-    <div class="card" id="c-tides"><div class="face" id="f-tides"><video id="v-tides" class="clip" src="assets/clips/tides.mp4" muted playsinline data-start="9.3" data-duration="6.6" data-track-index="5"></video><div class="sheen"></div></div>
-      <div class="lift" id="l-tides"><video id="v-tides-lift" class="clip" src="assets/clips/tides-lift.webm" muted playsinline data-start="9.3" data-duration="6.6" data-track-index="6"></video></div></div>
-    <div class="card" id="c-convo"><div class="face" id="f-convo"><video id="v-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="15.0" data-duration="8.0" data-track-index="3"></video><div class="sheen"></div></div></div>
-    <div class="card" id="c-palette"><div class="face" id="f-palette"><video id="v-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="22.1" data-duration="5.8" data-track-index="5"></video><div class="sheen"></div></div>
-      <div class="lift" id="l-palette"><video id="v-palette-lift" class="clip" src="assets/clips/palette-lift.webm" muted playsinline data-start="22.1" data-duration="5.8" data-track-index="6"></video></div></div>
-    <div class="card" id="c-paper"><div class="face" id="f-paper"><video id="v-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="27.0" data-duration="5.8" data-track-index="3"></video><div class="sheen"></div></div></div>
-    <div class="deck" id="deck">
-      <div class="dcard"><img src="assets/cards/blue.png" alt="" /></div>
-      <div class="dcard"><img src="assets/cards/pink.png" alt="" /></div>
-      <div class="dcard"><img src="assets/cards/green.png" alt="" /></div>
-      <div class="dcard"><img src="assets/cards/mountains.png" alt="" /></div>
-      <div class="dcard"><img src="assets/cards/sunset.png" alt="" /></div>
-      <div class="dcard"><img src="assets/cards/sea.png" alt="" /></div>
-    </div>
+    <video id="a-inbox" class="clip" src="assets/clips/glow-inbox.mp4" muted playsinline data-start="2.6" data-duration="7.6" data-track-index="1"></video>
+    <video id="a-tides" class="clip" src="assets/clips/glow-tides.mp4" muted playsinline data-start="9.3" data-duration="6.6" data-track-index="2"></video>
+    <video id="a-convo" class="clip" src="assets/clips/glow-convo.mp4" muted playsinline data-start="15.0" data-duration="8.0" data-track-index="1"></video>
+    <video id="a-palette" class="clip" src="assets/clips/glow-palette.mp4" muted playsinline data-start="22.1" data-duration="5.8" data-track-index="2"></video>
+    <video id="a-paper" class="clip" src="assets/clips/glow-paper.mp4" muted playsinline data-start="27.0" data-duration="5.8" data-track-index="1"></video>
+    <video id="a-looks" class="clip" src="assets/clips/glow-looks.mp4" muted playsinline data-start="31.9" data-duration="7.4" data-track-index="2"></video>
   </div>
 
-  <section id="h1" class="clip hl" data-start="3.0" data-duration="6.6" data-track-index="7"><p><span class="ln">What needs you,</span><span class="ln">at the top.</span></p></section>
-  <section id="h2" class="clip hl" data-start="9.65" data-duration="5.65" data-track-index="8"><p><span class="ln">New mail,</span><span class="ln">a few times a day.</span></p></section>
-  <section id="h3" class="clip hl" data-start="15.35" data-duration="7.05" data-track-index="7"><p><span class="ln">Email that reads</span><span class="ln">like messages.</span></p></section>
-  <section id="h4" class="clip hl" data-start="22.45" data-duration="4.85" data-track-index="8"><p><span class="ln">Find any email</span><span class="ln">in a few letters.</span></p></section>
-  <section id="h5" class="clip hl" data-start="27.35" data-duration="4.75" data-track-index="7"><p><span class="ln">Newsletters,</span><span class="ln">in one page.</span></p></section>
-  <section id="h6" class="clip hl top" data-start="32.3" data-duration="6.7" data-track-index="8"><p><span class="ln">Your colors. </span><span class="ln">Your pictures.</span></p></section>
+  <div class="win" id="win">
+    <div class="scr" id="s-inbox"><video id="v-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="2.6" data-duration="7.6" data-track-index="3"></video></div>
+    <div class="scr" id="s-tides"><video id="v-tides" class="clip" src="assets/clips/tides.mp4" muted playsinline data-start="9.3" data-duration="6.6" data-track-index="4"></video></div>
+    <div class="scr" id="s-convo"><video id="v-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="15.0" data-duration="8.0" data-track-index="3"></video></div>
+    <div class="scr" id="s-palette"><video id="v-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="22.1" data-duration="5.8" data-track-index="4"></video></div>
+    <div class="scr" id="s-paper"><video id="v-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="27.0" data-duration="5.8" data-track-index="3"></video></div>
+    <div class="scr" id="s-looks"><video id="v-looks" class="clip" src="assets/clips/looks.mp4" muted playsinline data-start="31.9" data-duration="7.4" data-track-index="4"></video></div>
+  </div>
 
-  <section id="title" class="clip card-t" data-start="0" data-duration="3.0" data-track-index="0">
+  <section id="h1" class="clip hl" data-start="3.0" data-duration="6.5" data-track-index="5"><p><span class="ln">What needs you,</span><span class="ln">at the top.</span></p></section>
+  <section id="h2" class="clip hl" data-start="9.5" data-duration="5.7" data-track-index="6"><p><span class="ln">New mail,</span><span class="ln">a few times a day.</span></p></section>
+  <section id="h3" class="clip hl" data-start="15.2" data-duration="7.0" data-track-index="5"><p><span class="ln">Email that reads</span><span class="ln">like messages.</span></p></section>
+  <section id="h4" class="clip hl" data-start="22.3" data-duration="4.9" data-track-index="6"><p><span class="ln">Find any email</span><span class="ln">in a few letters.</span></p></section>
+  <section id="h5" class="clip hl" data-start="27.2" data-duration="4.8" data-track-index="5"><p><span class="ln">Newsletters,</span><span class="ln">in one page.</span></p></section>
+  <section id="h6" class="clip hl" data-start="32.1" data-duration="6.6" data-track-index="6"><p><span class="ln">Your colors.</span><span class="ln">Your pictures.</span></p></section>
+
+  <section id="title" class="clip card" data-start="0" data-duration="3.0" data-track-index="0">
     <span class="name" id="t-name">Umbra</span>
     <span class="tag" id="t-tag">A calmer Gmail.</span>
   </section>
-  <section id="end" class="clip card-t" data-start="39.2" data-duration="4.8" data-track-index="0">
+  <section id="end" class="clip card" data-start="39.2" data-duration="4.8" data-track-index="0">
     <span class="name" id="e-name">Umbra</span>
     <span class="tag" id="e-tag">A calmer Gmail.</span>
     <span class="small" id="e-small">Private, free and open source · umbra.masn.studio</span>
   </section>
 
-  <audio id="bed" src="assets/bed.wav" data-start="0" data-duration="44" data-track-index="9" data-volume="1"></audio>
+  <audio id="bed" src="assets/bed.wav" data-start="0" data-duration="44" data-track-index="7" data-volume="1"></audio>
 </div>
 <script>
   // words and letters, each in a mask it rises out of
   const masked = (el, by) => {
     const wrap = (t) => (by === "letter" ? [...t] : t.trim().split(" ")).map((p) => `<span class="w" data-layout-allow-overflow><span class="i">${p === " " ? "&nbsp;" : p}</span></span>`).join(by === "letter" ? "" : " ");
     const lines = [...el.querySelectorAll(".ln")];
-    if (lines.length) lines.forEach((l, k) => { l.innerHTML = wrap(l.textContent) + (k < lines.length - 1 && el.closest(".top") ? " " : ""); });
+    if (lines.length) lines.forEach((l) => { l.innerHTML = wrap(l.textContent); });
     else el.innerHTML = wrap(el.textContent);
     return [...el.querySelectorAll(".i")];
   };
   document.fonts.ready.then(() => {
     const tl = gsap.timeline({ paused: true });
-    const rise = (els, t, stagger = 0.06, d = 0.9) => tl.fromTo(els, { yPercent: 110, opacity: 0, filter: "blur(8px)" }, { yPercent: 0, opacity: 1, filter: "blur(0px)", duration: d, ease: "power3.out", stagger }, t);
-    const leave = (els, t, stagger = 0.03) => tl.to(els, { yPercent: -110, opacity: 0, filter: "blur(6px)", duration: 0.45, ease: "power2.in", stagger }, t);
+    const rise = (els, t, stagger = 0.06, d = 1.0) => tl.fromTo(els, { yPercent: 105, opacity: 0 }, { yPercent: 0, opacity: 1, duration: d, ease: "power3.out", stagger }, t);
+    const leave = (els, t, stagger = 0.03) => tl.to(els, { yPercent: -105, opacity: 0, duration: 0.6, ease: "power2.in", stagger }, t);
     const line = (id, tin, tout) => { const ws = masked(document.querySelector(id + " p")); rise(ws, tin); leave(ws, tout); };
 
-    // ---- screens travel on rails: a fast throw that sheds its speed, then a soft catch onto the mark (no overshoot)
-    const amb = (id, on, t, d = 0.8) => tl.to("#a-" + id, { opacity: on ? 1 : 0, duration: d, ease: "sine.inOut" }, t);
-    const sheen = (id, t) => tl.fromTo("#c-" + id + " .sheen", { backgroundPosition: "130% 0" }, { backgroundPosition: "-30% 0", duration: 1.3, ease: "power2.out" }, t);
-    const inRight = (id, t) => {
-      tl.fromTo("#c-" + id, { x: 1500, z: -420, rotationY: -40, opacity: 0, filter: "blur(10px)" }, { x: 110, z: -30, rotationY: -5, opacity: 1, filter: "blur(1px)", duration: 0.55, ease: "power4.out" }, t);
-      tl.to("#c-" + id, { x: 0, z: 0, rotationY: 0, filter: "blur(0px)", duration: 0.8, ease: "power2.out" }, t + 0.55);
-      sheen(id, t + 0.15); amb(id, true, t);
+    // the next screen is revealed over the last, a clean edge moving from right to left. Nothing large moves: a big
+    // layer drifting a fraction of a pixel a frame steps unevenly, and that reads as choppy. (A sine ease starts and
+    // ends softly and never whips through the middle.)
+    const reveal = (from, to, t, d = 1.3) => {
+      tl.fromTo("#s-" + to, { clipPath: "inset(0% 0% 0% 100%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: d, ease: "sine.inOut" }, t);
+      tl.to("#a-" + from, { opacity: 0, duration: d, ease: "sine.inOut" }, t);
+      tl.fromTo("#a-" + to, { opacity: 0 }, { opacity: 1, duration: d, ease: "sine.inOut" }, t);
     };
-    const inBelow = (id, t) => {
-      tl.fromTo("#c-" + id, { y: 1150, z: -420, rotationX: -34, opacity: 0, filter: "blur(10px)" }, { y: 70, z: -30, rotationX: -4, opacity: 1, filter: "blur(1px)", duration: 0.55, ease: "power4.out" }, t);
-      tl.to("#c-" + id, { y: 0, z: 0, rotationX: 0, filter: "blur(0px)", duration: 0.8, ease: "power2.out" }, t + 0.55);
-      sheen(id, t + 0.15); amb(id, true, t);
-    };
-    const outLeft = (id, t) => { tl.to("#c-" + id, { x: -1750, z: -520, rotationY: 40, opacity: 0, filter: "blur(10px)", duration: 0.75, ease: "power3.in" }, t); amb(id, false, t, 0.6); };
-    const outUp = (id, t) => { tl.to("#c-" + id, { y: -1250, z: -500, rotationX: 34, opacity: 0, filter: "blur(10px)", duration: 0.75, ease: "power3.in" }, t); amb(id, false, t, 0.6); };
-    // one part of a screen rises off it toward the words, the rest falls a little out of focus; then it settles back
-    const lift = (id, t, back, o) => {
-      tl.fromTo("#l-" + id, { x: 0, y: 0, z: 0, rotationY: 0, filter: "drop-shadow(0px 0px 0px rgba(0,0,0,0))" }, Object.assign({ filter: "drop-shadow(0px 34px 46px rgba(0,0,0,0.5))", duration: 0.85, ease: "power3.out" }, o), t);
-      tl.fromTo("#f-" + id, { filter: "brightness(1) blur(0px)" }, { filter: "brightness(0.74) blur(2.5px)", duration: 0.85, ease: "power2.out" }, t);
-      tl.to("#l-" + id, { x: 0, y: 0, z: 0, rotationY: 0, filter: "drop-shadow(0px 0px 0px rgba(0,0,0,0))", duration: 0.6, ease: "power2.inOut" }, back);
-      tl.to("#f-" + id, { filter: "brightness(1) blur(0px)", duration: 0.6, ease: "power2.inOut" }, back);
-    };
+    tl.set(".scr:not(#s-inbox)", { clipPath: "inset(0% 0% 0% 100%)" }, 0);
 
-    // ---- the name
+    // the name
     const tName = masked(document.getElementById("t-name"), "letter"), tTag = masked(document.getElementById("t-tag"));
-    rise(tName, 0.25, 0.055, 1.1);
+    rise(tName, 0.25, 0.055, 1.2);
     rise(tTag, 0.95, 0.07);
-    leave([...tName, ...tTag], 2.25, 0.02);
+    leave([...tName, ...tTag], 2.2, 0.02);
 
-    // 1. what needs you: the inbox comes up from below; its two top lines rise off it toward the words
-    inBelow("inbox", 2.6);
-    line("#h1", 3.1, 9.05);
-    lift("inbox", 4.2, 6.15, { x: -80, y: -16, z: 150, rotationY: 7 });
+    // the window settles in, and its light with it
+    tl.fromTo("#win", { opacity: 0 }, { opacity: 1, duration: 1.1, ease: "sine.inOut" }, 2.55);
+    tl.fromTo("#amb", { opacity: 0 }, { opacity: 0.5, duration: 1.6, ease: "sine.inOut" }, 2.6);
+    tl.fromTo("#a-inbox", { opacity: 0 }, { opacity: 1, duration: 0.1 }, 2.6);
 
-    // 2. the tide: the inbox goes left, the next comes in from the right; the pill rises, is pressed, settles, and lets them in
-    outLeft("inbox", 9.3);
-    inRight("tides", 9.42);
-    line("#h2", 9.75, 14.75);
-    lift("tides", 10.3, 11.8, { x: -150, y: -34, z: 240, rotationY: 10 });
+    line("#h1", 3.1, 8.95);
+    reveal("inbox", "tides", 9.3);
+    line("#h2", 9.6, 14.7);
+    reveal("tides", "convo", 15.0);
+    line("#h3", 15.3, 21.75);
+    reveal("convo", "palette", 22.1);
+    line("#h4", 22.4, 26.7);
+    reveal("palette", "paper", 27.0);
+    line("#h5", 27.3, 31.55);
+    reveal("paper", "looks", 31.9);
+    line("#h6", 32.2, 38.0);
 
-    // 3. a conversation, rising from below as the inbox leaves upward
-    outUp("tides", 15.0);
-    inBelow("convo", 15.12);
-    line("#h3", 15.45, 21.85);
-
-    // 4. finding: across again; the bar rises off the inbox while the letters find her email
-    outLeft("convo", 22.1);
-    inRight("palette", 22.22);
-    line("#h4", 22.55, 26.75);
-    lift("palette", 23.1, 26.3, { x: -60, y: -14, z: 160, rotationY: 6 });
-
-    // 5. the paper, from below
-    outUp("palette", 27.0);
-    inBelow("paper", 27.12);
-    line("#h5", 27.45, 31.6);
-
-    // 6. colors and pictures: the paper goes, and six looks glide past on a rail, each turning to face you as it
-    //    passes the middle, until the rail slows and settles on the last
-    outLeft("paper", 31.9);
-    line("#h6", 32.4, 38.4);
-    const cards = [...document.querySelectorAll(".dcard")], SP = 760, CX = 960;
-    const hues = ["#1f4fd6", "#cc1f66", "#0f8f4a", "#3c6e9a", "#d4562a", "#8c8fa8"].map((h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16)));
-    const glow = document.getElementById("glow");
-    const place = (pos) => {
-      cards.forEach((el, i) => {
-        const d = (i * SP - pos) / SP; // this card's place on the rail, in cards from the middle
-        const a = Math.abs(d), s = Math.sign(d);
-        gsap.set(el, {
-          x: CX - 400 + d * SP * 0.86, z: -Math.min(1.8, a) * 300, rotationY: -s * Math.min(1, a) * 38,
-          opacity: Math.max(0, Math.min(1, 2.6 - a)), filter: `blur(${(Math.min(1.6, a) * 3).toFixed(2)}px) brightness(${(1 - Math.min(1, a) * 0.28).toFixed(3)})`,
-          zIndex: 100 - Math.round(a * 10), // (the one nearest the middle is on top)
-        });
-      });
-      // the light on the dark is the color of whatever is in the middle
-      const f = Math.max(0, Math.min(hues.length - 1, pos / SP)), i0 = Math.floor(f), i1 = Math.min(hues.length - 1, i0 + 1), u = f - i0;
-      const c = hues[i0].map((v, k) => Math.round(v + (hues[i1][k] - v) * u));
-      glow.style.backgroundColor = `rgb(${c.join(",")})`;
-    };
-    const rail = { pos: -2.2 * SP };
-    const ride = (to, t, d, ease) => tl.to(rail, { pos: to, duration: d, ease, modifiers: { pos: (v) => { place(+v); return v; } } }, t);
-    tl.set(".dcard", { opacity: 0 }, 0);
-    ride(0, 32.1, 1.4, "power3.out");
-    ride(5 * SP, 33.5, 4.2, "sine.inOut");
-    tl.fromTo("#glow", { opacity: 0 }, { opacity: 0.45, duration: 1.2, ease: "sine.out" }, 32.1);
-    // and the rail empties: the cards fall away and the light goes
-    tl.to(".dcard", { y: 60, opacity: 0, duration: 0.7, ease: "power2.in", stagger: 0.04 }, 38.5);
-    tl.to("#glow", { opacity: 0, duration: 0.9, ease: "sine.in" }, 38.4);
-
-    // ---- the name returns
-    rise(masked(document.getElementById("e-name"), "letter"), 39.5, 0.055, 1.1);
+    // the window goes, and the name returns
+    tl.to("#win", { opacity: 0, duration: 1.0, ease: "sine.inOut" }, 38.3);
+    tl.to("#amb", { opacity: 0, duration: 1.0, ease: "sine.inOut" }, 38.3);
+    rise(masked(document.getElementById("e-name"), "letter"), 39.5, 0.055, 1.2);
     rise(masked(document.getElementById("e-tag")), 40.2, 0.07);
     rise(masked(document.getElementById("e-small")), 40.8, 0.03);
-    tl.to("#end", { opacity: 0, duration: 0.7, ease: "sine.in" }, 43.3);
+    tl.to("#end", { opacity: 0, duration: 0.8, ease: "sine.in" }, 43.2);
 
-    tl.fromTo("#grain", { backgroundPosition: "0px 0px" }, { backgroundPosition: "512px 384px", duration: 44, ease: "steps(260)" }, 0);
     window.__timelines["main"] = tl;
   });
 </script>

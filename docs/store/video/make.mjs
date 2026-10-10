@@ -86,22 +86,11 @@ ${script}
 `);
 }
 
-/* ---- layers: one part of a screen on its own, transparent around it (to lift off the window in the film), and the
-   screen without that part (so the lifted layer is the only copy) */
-const layerCss = (keep) => `  html, body, html.qm, html.qm body { background: transparent !important; }
-  #qm-view, #qm-dock, #qm-burger, #qm-pal-scrim, .caret { visibility: hidden !important; }
-  #qm-view, #qm-pal-scrim { background: transparent !important; }
-  ${keep}, ${keep} * { visibility: visible !important; }
-`;
-const holeCss = (sel) => `  ${sel}, ${sel} * { visibility: hidden !important; }\n`;
-
 /* ---- the screens */
 const SCREENS = {
   // the inbox arrives; one email is done (e) and goes; the cursor goes up to Lena's
-  inbox: (lift) => screen(lift ? "inbox-lift" : "inbox", 7.6, {
+  inbox: () => screen("inbox", 7.6, {
     bg: "#1f4fd6",
-    // (the two lines at the top have room for a raised panel; it shows only on the lifted layer, only while lifted)
-    css: `  .qm-brief { padding: 12px 18px; margin-left: -18px; margin-right: -18px; margin-top: -12px; border-radius: 16px; }\n` + (lift ? layerCss(".qm-brief") : holeCss(".qm-brief")),
     body: inbox(),
     script: `
     const rows = $$(".qm-row");
@@ -110,9 +99,6 @@ const SCREENS = {
     tl.fromTo(".qm-day", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 0.5);
     tl.fromTo(rows, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.07 }, 0.55);
     tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.55, ease: "back.out(1.6)" }, 1.05);
-    // (while the film lifts these two lines off the screen, 1.6 to 4.0, they sit on a panel of their own)
-    tl.fromTo(".qm-brief", { backgroundColor: "rgba(52, 98, 224, 0)", boxShadow: "0 0 0 rgba(0, 10, 50, 0)" }, { backgroundColor: "rgba(52, 98, 224, 1)", boxShadow: "0 30px 70px rgba(0, 10, 50, 0.45)", duration: 0.5, ease: "power2.out" }, 1.6);
-    tl.to(".qm-brief", { backgroundColor: "rgba(52, 98, 224, 0)", boxShadow: "0 0 0 rgba(0, 10, 50, 0)", duration: 0.45, ease: "power2.in" }, 3.55);
     // then one email is done (e), and the cursor goes up to Lena's
     mark(tl, rows[2], "qm-cursor", true, 4.0);
     tl.to(rows[2], { x: -28, opacity: 0, duration: 0.34, ease: "power2.in" }, 4.5);
@@ -124,7 +110,6 @@ const SCREENS = {
     mark(tl, rows[1], "qm-cursor", false, 5.92);
     mark(tl, rows[0], "qm-cursor", true, 5.92);`,
   }),
-  "inbox-lift": () => SCREENS.inbox(true),
 
   // Lena's conversation; a reply typed in the box, sent, and in its place
   convo: () => {
@@ -185,19 +170,14 @@ const SCREENS = {
     });
   },
 
-  // ⌘K over the inbox: down the list, then a few letters find Lena's email. Drawn as two layers: the inbox under
-  // its shade (palette), and the bar alone on nothing (palette-lift, with transparency), so the bar can rise off the window
-  palette: (lift) => {
+  // ⌘K over the inbox: down the list, then a few letters find Lena's email
+  palette: () => {
     const item = (ico, label, hint, sub) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span>${hint ? `<span class="qm-pal-hint">${hint}</span>` : ""}</div>`;
     const tag = (ico, label, sub, t) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span><span class="qm-pal-tag">${t}</span></div>`;
     const sec = (t) => `<div class="qm-pal-sec">${t}</div>`;
-    return screen(lift ? "palette-lift" : "palette", 5.8, {
+    return screen("palette", 5.8, {
       bg: "#0f8f4a",
-      css: (lift ? `  html, body, html.qm, html.qm body { background: transparent !important; }
-  #qm-view, #qm-dock, #qm-burger { visibility: hidden !important; }
-  #qm-pal-scrim { background: transparent !important; }
-` : `  #qm-pal, .caret { visibility: hidden !important; }
-`) + `  .qm-pal-list { position: relative; }
+      css: `  .qm-pal-list { position: relative; }
   .found { position: absolute; left: 0; right: 0; top: 0; padding: 6px; opacity: 0; }
   .field { position: relative; flex: 1; height: 24px; }
   .field .ph, .field .typed { position: absolute; inset: 0; display: flex; align-items: center; font: 400 17px var(--sans); white-space: pre; }
@@ -234,12 +214,11 @@ const SCREENS = {
     tl.fromTo(found, { y: 6 }, { y: 0, duration: 0.35, ease: "power3.out", stagger: 0.04 }, 2.26);`,
     });
   },
-  "palette-lift": () => SCREENS.palette(true),
 
   // new mail a few times a day: four wait for the tide; let in, they arrive together at the top
-  tides: (lift) => screen(lift ? "tides-lift" : "tides", 6.6, {
+  tides: () => screen("tides", 6.6, {
     bg: "#1f4fd6",
-    css: `  .qm-calmslot { margin: -24px 0 28px; }\n` + (lift ? layerCss(".qm-tidepill") : holeCss(".qm-tidepill")),
+    css: `  .qm-calmslot { margin: -24px 0 28px; }`,
     body: inbox().replace('<div class="qm-rows qm-avs" id="rows">', `<div class="qm-calmslot"><div class="qm-cpills"><div class="qm-cpill qm-tidepill">{{icon:later}}<span>4 waiting for the tide at 3:00 PM</span><button type="button" class="letin">Let them in</button></div></div></div><div class="qm-rows qm-avs" id="rows">`),
     script: `
     const rows = $$(".qm-row"), fresh = rows.slice(0, 4), old = rows.slice(4), h = rows[1].offsetTop - rows[0].offsetTop;
@@ -251,7 +230,7 @@ const SCREENS = {
     tl.fromTo(pill, { opacity: 0, y: 10, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, 0.3);
     tl.fromTo([".qm-day", ...old], { opacity: 0 }, { opacity: 1, duration: 0.6, stagger: 0.06 }, 0.4);
     tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.6)" }, 0.6);
-    // let them in (the film has lifted the pill by now): the button gives, the pill goes, the four arrive together
+    // let them in: the button gives, the pill goes, the four arrive together
     tl.fromTo(".letin", { scale: 1 }, { scale: 0.9, duration: 0.12, ease: "power2.in" }, 2.4);
     tl.to(".letin", { scale: 1, duration: 0.25, ease: "back.out(2)" }, 2.52);
     tl.to(pill, { opacity: 0, scale: 0.96, duration: 0.3, ease: "power2.in" }, 2.9);
@@ -259,10 +238,9 @@ const SCREENS = {
     tl.to(old, { y: 0, duration: 0.75, ease: "power3.inOut" }, 3.2);
     tl.fromTo(fresh, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.08 }, 3.4);`,
   }),
-  "tides-lift": () => SCREENS.tides(true),
 
   // your colors, then your pictures: the same inbox in blue, pink and green, then over three photos
-  looks: () => screen("looks", 6.6, {
+  looks: () => screen("looks", 7.4, {
     bg: "#1f4fd6",
     css: `  html.qm {
     --qm-bgimg: none; --qm-bgdim: 0.36;
@@ -276,13 +254,13 @@ const SCREENS = {
     const to = (c, rgb, t, d = 0.45) => tl.to(R, { "--bg": c, "--bg-rgb": rgb, duration: d, ease: "sine.inOut" }, t);
     to("#cc1f66", "204, 31, 102", 0.55);
     to("#0f8f4a", "15, 143, 74", 1.3);
-    // your own picture: the first fades in as the page goes dark behind it, the next ones wipe in from the right
+    // your own picture: the first fades in as the page goes dark behind it, the next ones slide in over it from the right
     tl.set(R, { attr: { class: "qm qm-v-list qm-spacious qm-bgimg qm-halo qm-halo-read" } }, 2.1);
-    tl.fromTo(pics[0], { opacity: 0, scale: 1.08 }, { opacity: 1, scale: 1, duration: 0.8, ease: "power2.out" }, 2.1);
+    tl.fromTo(pics[0], { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "sine.inOut" }, 2.1);
     to("#0f1012", "15, 16, 18", 2.1, 0.6);
     for (const [i, t] of [[1, 3.55], [2, 5.0]]) {
       tl.set(pics[i], { opacity: 1 }, t);
-      tl.fromTo(pics[i], { clipPath: "inset(0% 0% 0% 100%)", scale: 1.06 }, { clipPath: "inset(0% 0% 0% 0%)", scale: 1, duration: 0.9, ease: "power3.inOut" }, t);
+      tl.fromTo(pics[i], { clipPath: "inset(0% 0% 0% 100%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 1.0, ease: "power2.inOut" }, t);
     }`,
   }),
 
@@ -351,6 +329,8 @@ function writeUI() {
   for (const [id, make] of Object.entries(SCREENS)) { writeFileSync(at(`./ui/${id}.html`), make()); console.log("  ui/" + id + ".html"); }
 }
 
+/* (HF_STATIC_DEDUP=false: otherwise the renderer reuses frames it guesses are unchanged, and a slow reveal comes out
+   late, in a jump) */
 /* ---- render: each screen at 4K (3 × its 1280 × 720), then scaled down into the 1536 × 864 window it plays in */
 function renderClips(only) {
   mkdirSync(at("./assets/clips/"), { recursive: true });
@@ -359,12 +339,14 @@ function renderClips(only) {
     if (only.length && !only.includes(id)) continue;
     const alpha = id.endsWith("-lift");
     const big = at(`./renders/ui-${id}.${alpha ? "webm" : "mp4"}`);
-    execFileSync("npx", ["--yes", HF, "render", "-c", `ui/${id}.html`, "--resolution", "landscape-4k", "--fps", String(FPS), "--quality", "delivery", ...(alpha ? ["--format", "webm"] : []), "-o", big, "--quiet"], { cwd: at("./"), stdio: "inherit" });
+    execFileSync("npx", ["--yes", HF, "render", "-c", `ui/${id}.html`, "--resolution", "landscape-4k", "--fps", String(FPS), "--quality", "delivery", ...(alpha ? ["--format", "webm"] : []), "-o", big, "--quiet"], { cwd: at("./"), stdio: "inherit", env: { ...process.env, HF_STATIC_DEDUP: "false" } });
     const out = at(`./assets/clips/${id}.${alpha ? "webm" : "mp4"}`);
     const enc = alpha
       ? ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "0", "-crf", "18", "-auto-alt-ref", "0", "-g", "30"]
       : ["-c:v", "libx264", "-crf", "12", "-preset", "slow", "-g", "30", "-keyint_min", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart"];
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...(alpha ? ["-c:v", "libvpx-vp9"] : []), "-i", big, "-vf", "scale=2560:1440:flags=lanczos", ...enc, "-an", out]);
+    // and a small copy for the light it casts around the window (its own file: one video, one place in the film)
+    if (!alpha) execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", out, "-vf", "scale=640:360:flags=area", "-c:v", "libx264", "-crf", "20", "-g", "30", "-pix_fmt", "yuv420p", "-an", at(`./assets/clips/glow-${id}.mp4`)]);
     console.log("  assets/clips/" + id + (alpha ? ".webm" : ".mp4"));
   }
 }
