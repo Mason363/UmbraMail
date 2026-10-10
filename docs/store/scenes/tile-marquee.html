@@ -1,9 +1,16 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Umbra · marquee</title><link rel="stylesheet" href="/scenes/type.css">
 <style>
-  .words { position: fixed; left: 55%; top: 50%; transform: translateY(-54%); color: #fff; }
-  .words b { display: block; font: 380 120px/1 var(--serif); letter-spacing: -.03em; text-shadow: 0 2px 40px rgba(0, 14, 60, .35); }
-  .words span { display: block; margin-top: 22px; font: 400 26px/1.3 var(--sans); color: rgba(255, 255, 255, .84); }
+  body { background: #0b0b0d; }
+  .name { position: fixed; left: 92px; top: 50%; transform: translateY(-56%); color: #fff; }
+  .name b { display: block; font: 400 112px/1 var(--serif); letter-spacing: -.03em; }
+  .name span { display: block; margin-top: 18px; font: 400 26px/1.3 var(--sans); color: rgba(255, 255, 255, .78); }
+  .win { position: fixed; width: 1280px; height: 800px; transform-origin: 0 0; border: 0; border-radius: 26px; box-shadow: 0 40px 120px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .06); }
+  .w1 { left: 760px; top: 46px; transform: scale(.42); }
+  .w2 { left: 690px; top: 128px; transform: scale(.42); }
+  .w3 { left: 620px; top: 210px; transform: scale(.42); }
 </style></head>
-<body><canvas></canvas><div class="words"><b>Umbra</b><span>A calmer Gmail.</span></div>
-<script src="/eclipse.js"></script><script src="/scenes/sky.js" data-x=".3" data-y=".46" data-size=".16" data-hor="1.5"></script></body></html>
+<body><div class="name"><b>Umbra</b><span>A calmer Gmail.</span></div>
+<iframe class="win w1" src="/scenes/inbox.html?bg=0f8f4a" tabindex="-1"></iframe>
+<iframe class="win w2" src="/scenes/inbox.html?bg=cc1f66" tabindex="-1"></iframe>
+<iframe class="win w3" src="/scenes/inbox.html?bg=1f4fd6" tabindex="-1"></iframe></body></html>

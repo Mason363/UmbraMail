@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, extname } from "node:path";
 import { deflateSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
+import { fillIcons } from "./icons.mjs";
 
 const at = (p) => fileURLToPath(new URL(p, import.meta.url));
 const SITE = at("../../dist/site/"), SCENES = at("./scenes/"), OUT = at("./"), EXT = at("../../extension/");
@@ -16,11 +17,12 @@ const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/M
 
 /* ---- what's drawn: [file, page, width, height] (icons: [file, page, size, padding]) */
 const PICTURES = [
-  ["screenshot-1-inbox.png", "/scenes/inbox.html", 1280, 800],
-  ["screenshot-2-conversation.png", "/scenes/conversation.html", 1280, 800],
-  ["screenshot-3-actions.png", "/scenes/palette.html", 1280, 800],
-  ["screenshot-4-look.png", "/scenes/look.html", 1280, 800],
-  ["screenshot-5-welcome.png", "/scenes/welcome.html", 1280, 800],
+  // [file, page, width, height, zoom: the interface drawn this much larger, so it reads in the store's small previews]
+  ["screenshot-1-inbox.png", "/scenes/inbox.html?bg=1f4fd6", 1280, 800, 1.2],
+  ["screenshot-2-conversation.png", "/scenes/conversation.html?bg=cc1f66", 1280, 800, 1.2],
+  ["screenshot-3-actions.png", "/scenes/palette.html?bg=0f8f4a", 1280, 800, 1.2],
+  ["screenshot-4-light.png", "/scenes/inbox.html?light=1&bg=ffe7a3", 1280, 800, 1.2],
+  ["screenshot-5-paper.png", "/scenes/paper.html", 1280, 800, 1.2],
   ["tile-small.png", "/scenes/tile-small.html", 440, 280],
   ["tile-marquee.png", "/scenes/tile-marquee.html", 1400, 560],
 ];
@@ -31,21 +33,6 @@ const ICONS_OUT = [
   ["icon32.png", "/scenes/icon.html?y=.43&size=.28&c=-.03&dim=.28", 32, 1, 0.45],
   ["icon16.png", "/scenes/icon.html?y=.44&size=.32&c=-.03&dim=.34&hor=2.1&stars=0&grain=0", 16, 0, 0.6],
 ];
-
-/* ---- Umbra's icons, filled into the scenes (as the build fills them into the site's demo) */
-const ICONS = new Function("return " + readFileSync(at("../../src/umbra.js"), "utf8").match(/\nconst ICONS = (\{[\s\S]*?\n\});/)[1])();
-const icon = (name) => {
-  if (!ICONS[name]) throw new Error("no icon " + name);
-  const parts = ICONS[name].map((d) => {
-    const n = d.slice(2).split(",");
-    if (d.startsWith("c:")) return `<circle cx="${n[0]}" cy="${n[1]}" r="${n[2]}"/>`;
-    if (d.startsWith("d:")) return `<circle cx="${n[0]}" cy="${n[1]}" r="1.5"/>`;
-    if (d.startsWith("f:")) return `<circle cx="${n[0]}" cy="${n[1]}" r="${n[2]}" class="qm-fill"/>`;
-    if (d.startsWith("r:")) return `<rect x="${n[0]}" y="${n[1]}" width="${n[2]}" height="${n[3]}" rx="${n[4]}"/>`;
-    return `<path d="${d}"/>`;
-  });
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" class="${name === "more" ? "qm-svg qm-solid" : "qm-svg"}">${parts.join("")}</svg>`;
-};
 
 /* ---- a small server: the built site, and the scenes under /scenes/ (with the site's made-up inbox where they say {{inbox}}) */
 const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".jpg": "image/jpeg", ".png": "image/png", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
@@ -60,7 +47,8 @@ const server = createServer((req, res) => {
   if (file.endsWith(".html")) {
     const demo = readFileSync(at("../../site/demo.html"), "utf8");
     const inbox = demo.slice(demo.indexOf("<body>") + 6, demo.indexOf('<script src="/demo.js">'));
-    body = body.toString("utf8").replace("{{inbox}}", inbox).replace(/\{\{icon:([a-z]+)\}\}/g, (m, n) => icon(n));
+    body = body.toString("utf8").replace("{{inbox}}", inbox);
+    body = fillIcons(body);
   }
   res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream", "cache-control": "no-store" }).end(body);
 });
@@ -88,9 +76,8 @@ await send("Page.enable");
 await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }, { name: "prefers-color-scheme", value: "dark" }] });
 
 // draws a page at twice the size, then scales it down to w × h (in the page: Chrome's own, careful, downscale)
-async function draw(page, w, h, { alpha = false, into = null, sharpen = 0 } = {}) {
-  const box = into ? { w: into.art, h: into.art } : { w, h };
-  const css = into ? 512 : w, cssH = into ? 512 : h, dpr = into ? 1 : 2;
+async function draw(page, w, h, { alpha = false, into = null, sharpen = 0, zoom = 1 } = {}) {
+  const css = into ? 512 : Math.round(w / zoom), cssH = into ? 512 : Math.round(h / zoom), dpr = into ? 1 : 2 * zoom;
   await send("Emulation.setDeviceMetricsOverride", { width: css, height: cssH, deviceScaleFactor: dpr, mobile: false });
   await send("Emulation.setDefaultBackgroundColorOverride", alpha ? { color: { r: 0, g: 0, b: 0, a: 0 } } : {});
   const loaded = new Promise((r) => { const id = setInterval(async () => { try { if ((await run("document.readyState")) === "complete") { clearInterval(id); r(); } } catch (e) { /* navigating */ } }, 100); });
@@ -168,7 +155,7 @@ function encodePNG(w, h, rgba, alpha) {
 const only = process.argv.slice(2);
 const want = (f) => !only.length || only.some((o) => f.includes(o));
 try {
-  for (const [file, page, w, h] of PICTURES) if (want(file)) { writeFileSync(OUT + file, await draw(page, w, h)); console.log("  " + file); }
+  for (const [file, page, w, h, zoom] of PICTURES) if (want(file)) { writeFileSync(OUT + file, await draw(page, w, h, { zoom })); console.log("  " + file); }
   for (const [file, page, size, pad, sharpen] of ICONS_OUT) if (want(file) || only.includes("icons")) {
     const png = await draw(page, size, size, { alpha: true, sharpen, into: { size, pad, art: size - 2 * pad } });
     writeFileSync(EXT + file, png);

@@ -2,5 +2,7 @@
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body { cursor: default; }
 #rows .qm-day ~ .qm-day, #rows .qm-day ~ .qm-day ~ .qm-row { display: none; }
+/* (five of today's: the list ends clear of the write button) */
+#rows > :nth-child(n+7) { display: none; }
 /* how it looks: the inbox, as wide as the part the welcome leaves open (so nothing is cut off) */
 .beside { position: fixed; top: 0; right: 0; width: 46%; height: 100%; border: 0; }

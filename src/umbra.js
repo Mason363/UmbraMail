@@ -1602,6 +1602,13 @@ function themedBase(hex, light) {
   if (!light && ll > 0.5) return hslHex(hh, Math.min(ss, 0.3), 0.075);
   return hex;
 }
+function vivid(hex, light) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const [, ss, ll] = rgbHsl((n >> 16) & 255, (n >> 8) & 255, n & 255);
+  return light ? ll < 0.9 && ss > 0.2 : ll > 0.16 && ss > 0.2;
+}
 function softFace(hex, light) {
   const n = parseInt(hex.slice(1), 16);
   const [hh, ss, ll] = rgbHsl((n >> 16) & 255, (n >> 8) & 255, n & 255);
@@ -1618,6 +1625,8 @@ function applyLook() {
   const face = prefs.soft && base ? softFace(base, light) : "";
   if (face) { st.setProperty("--face", face); st.setProperty("--face-rgb", hexRgb(face)); } else { st.removeProperty("--face"); st.removeProperty("--face-rgb"); }
   const page = face && bg.kind === "color" ? face : base;
+  // (a real color, not one of the near-neutral tones: text and surfaces are drawn from it)
+  ROOT.classList.toggle("qm-tinted", bg.kind === "color" && !face && vivid(base, light));
   const rgb = page ? hexRgb(page) : "";
   if (rgb) { st.setProperty("--bg", page); st.setProperty("--bg-rgb", rgb); } else { st.removeProperty("--bg"); st.removeProperty("--bg-rgb"); }
   const img = bg.kind === "image" ? store.get("bg-img", "") : "";

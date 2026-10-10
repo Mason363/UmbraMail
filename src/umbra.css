@@ -1557,6 +1557,28 @@ html.qm.qm-soft.qm-light {
   --sl: rgba(255, 255, 255, .92); --sd: rgba(158, 150, 132, .46);
   --line: color-mix(in srgb, var(--face) 90%, #000); --line-2: color-mix(in srgb, var(--face) 87%, #000); --line-3: color-mix(in srgb, var(--face) 82%, #000);
 }
+/* a color of your own behind the mail (Settings › Look › Color): surfaces are that color, lifted, and text is
+   white (or black) of a strength that reads on it, so a vivid blue, pink or green reads as well as the default */
+html.qm.qm-tinted:not(.qm-light) {
+  --row-hover: color-mix(in srgb, var(--bg) 93%, #fff); --s1: color-mix(in srgb, var(--bg) 91%, #fff); --s2: color-mix(in srgb, var(--bg) 88%, #fff);
+  --s3: color-mix(in srgb, var(--bg) 85%, #fff); --sel: color-mix(in srgb, var(--bg) 82%, #fff); --mine: color-mix(in srgb, var(--bg) 80%, #fff);
+  --chip: color-mix(in srgb, var(--bg) 88%, #fff); --chip-2: color-mix(in srgb, var(--bg) 84%, #fff); --side: color-mix(in srgb, var(--bg) 90%, #000);
+  --line: color-mix(in srgb, var(--bg) 86%, #fff); --line-2: color-mix(in srgb, var(--bg) 82%, #fff); --line-3: color-mix(in srgb, var(--bg) 76%, #fff);
+  --hi: color-mix(in srgb, var(--bg) 76%, #fff); --hover: color-mix(in srgb, var(--bg) 84%, #fff); --hover-2: color-mix(in srgb, var(--bg) 90%, #fff);
+  --scroll: color-mix(in srgb, var(--bg) 70%, #fff); --avatar: color-mix(in srgb, var(--bg) 78%, #fff); --ink: var(--bg);
+  --text: #fff; --text-2: rgba(255, 255, 255, .94); --text-3: rgba(255, 255, 255, .78); --text-4: rgba(255, 255, 255, .7);
+  --text-5: rgba(255, 255, 255, .56); --text-6: rgba(255, 255, 255, .64); --icon: rgba(255, 255, 255, .74); --ring: rgba(255, 255, 255, .5);
+}
+html.qm.qm-tinted.qm-light {
+  --row-hover: color-mix(in srgb, var(--bg) 94%, #000); --s1: color-mix(in srgb, var(--bg) 94%, #000); --s2: color-mix(in srgb, var(--bg) 70%, #fff);
+  --s3: color-mix(in srgb, var(--bg) 92%, #000); --sel: color-mix(in srgb, var(--bg) 88%, #000); --mine: color-mix(in srgb, var(--bg) 90%, #000);
+  --chip: color-mix(in srgb, var(--bg) 92%, #000); --chip-2: color-mix(in srgb, var(--bg) 88%, #000); --side: color-mix(in srgb, var(--bg) 70%, #fff);
+  --line: color-mix(in srgb, var(--bg) 92%, #000); --line-2: color-mix(in srgb, var(--bg) 89%, #000); --line-3: color-mix(in srgb, var(--bg) 84%, #000);
+  --hi: color-mix(in srgb, var(--bg) 86%, #000); --hover: color-mix(in srgb, var(--bg) 90%, #000); --hover-2: color-mix(in srgb, var(--bg) 94%, #000);
+  --scroll: color-mix(in srgb, var(--bg) 80%, #000); --avatar: color-mix(in srgb, var(--bg) 88%, #000);
+  --text: #111; --text-2: rgba(0, 0, 0, .86); --text-3: rgba(0, 0, 0, .66); --text-4: rgba(0, 0, 0, .6);
+  --text-5: rgba(0, 0, 0, .48); --text-6: rgba(0, 0, 0, .54); --icon: rgba(0, 0, 0, .6); --ring: rgba(0, 0, 0, .4);
+}
 @keyframes qm-soft-in { from { opacity: 0; transform: translateY(6px) scale(.985); box-shadow: var(--flat); } }
 @keyframes qm-soft-up { from { box-shadow: var(--flat); transform: translateY(3px); } }
 html.qm-soft { --soft-t: box-shadow .16s var(--ease-out), transform .16s var(--ease-out), background-color .16s var(--ease), color .12s var(--ease); }
