@@ -6,7 +6,7 @@ from scipy.io import wavfile
 from scipy.signal import fftconvolve, butter, sosfilt
 
 SR = 48000
-LENGTH = 41.0
+LENGTH = 44.0
 rng = np.random.default_rng(7)
 N = int(SR * LENGTH)
 t_all = np.arange(N) / SR
@@ -19,19 +19,19 @@ def hz(note):
 # where the scenes change (index.html): the chords change with them
 CHORDS = [
     (0.0, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),      # Dmaj9: the name
-    (2.8, "G2", ["B3", "D4", "F#4", "A4"]),             # Gmaj9: the inbox
-    (5.75, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9
-    (8.7, "B1", ["A3", "D4", "F#4", "C#5"]),            # Bm9: the tide
-    (11.5, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj7
-    (13.8, "F#2", ["A3", "D4", "F#4", "E5"]),           # D/F#: a conversation
-    (17.5, "E2", ["G3", "B3", "D4", "F#4"]),            # Em9
-    (20.7, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: finding
-    (23.3, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
-    (25.4, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: the paper
-    (28.0, "G2", ["B3", "D4", "F#4", "C#5"]),           # Gmaj7#11
-    (30.1, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9: colors and pictures
-    (33.4, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
-    (36.2, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the end, and rest
+    (2.6, "G2", ["B3", "D4", "F#4", "A4"]),             # Gmaj9: what needs you
+    (5.95, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9
+    (9.3, "B1", ["A3", "D4", "F#4", "C#5"]),            # Bm9: the tide
+    (12.15, "G2", ["B3", "D4", "F#4", "A4"]),           # Gmaj7
+    (15.0, "F#2", ["A3", "D4", "F#4", "E5"]),           # D/F#: a conversation
+    (18.55, "E2", ["G3", "B3", "D4", "F#4"]),           # Em9
+    (22.1, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: finding
+    (24.55, "A2", ["G3", "C#4", "E4", "B4"]),           # A13sus
+    (27.0, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: the paper
+    (29.45, "G2", ["B3", "D4", "F#4", "C#5"]),          # Gmaj7#11
+    (31.9, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9: colors and pictures
+    (35.55, "A2", ["G3", "C#4", "E4", "B4"]),           # A13sus
+    (39.2, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the end, and rest
 ]
 ends = [c[0] for c in CHORDS[1:]] + [LENGTH]
 
@@ -97,17 +97,17 @@ for (start, bass, notes), end in zip(CHORDS, ends):
         place(ep(hz(nm), 1.0 - i * 0.08), start + 0.02 + i * 0.045, pan=-0.35 + i * 0.18)
 
 # a few quiet notes on top, from the scale, between the chords
-MELODY = [(4.0, "F#5"), (4.9, "A5"), (7.2, "B5"), (10.1, "C#6"), (11.0, "A5"), (12.9, "F#5"), (15.2, "E5"), (15.9, "F#5"),
-          (18.8, "B5"), (21.9, "A5"), (24.4, "E5"), (26.6, "F#5"), (27.3, "C#6"), (29.2, "B5"), (31.5, "A5"), (32.3, "B5"),
-          (34.6, "C#6"), (37.4, "A5"), (38.3, "F#5")]
+MELODY = [(3.9, "F#5"), (4.8, "A5"), (7.0, "B5"), (10.4, "C#6"), (11.3, "A5"), (13.4, "F#5"), (16.3, "E5"), (17.0, "F#5"),
+          (19.9, "B5"), (23.2, "A5"), (25.6, "E5"), (28.2, "F#5"), (28.9, "C#6"), (30.6, "B5"), (33.0, "A5"), (33.8, "B5"),
+          (36.4, "C#6"), (40.3, "A5"), (41.2, "F#5")]
 for when, nm in MELODY:
     place(ep(hz(nm), 0.62, 3.6), when, pan=0.25, gain=1.0)
 
-# ---- a soft arpeggio through each chord (eighth notes, 92 a minute), from the inbox until the end card
+# ---- a soft arpeggio through each chord (eighth notes, 92 a minute), from the first screen until the end card
 step = 60 / 92 / 2
-t = 2.8
+t = 2.6
 k = 0
-while t < 36.2 - 0.05:
+while t < 39.2 - 0.05:
     chord = [c for c in CHORDS if c[0] <= t + 1e-6][-1]
     tones = chord[2][1:4] + [chord[2][2]]
     nm = tones[k % len(tones)]
@@ -124,7 +124,7 @@ def chime(f):
     s = np.sin(2 * np.pi * f * t) + 0.35 * np.sin(2 * np.pi * f * 2.76 * t) * np.exp(-t * 3)
     return s * np.minimum(1, t / 0.006) * np.exp(-t * 1.6) * 0.035
 
-for when, nm in [(2.8, "A6"), (8.7, "F#6"), (13.8, "A6"), (20.7, "B6"), (25.4, "F#6"), (30.1, "A6"), (36.2, "A6")]:
+for when, nm in [(2.6, "A6"), (9.3, "F#6"), (15.0, "A6"), (22.1, "B6"), (27.0, "F#6"), (31.9, "A6"), (39.2, "A6")]:
     place(chime(hz(nm)), when, pan=0.4)
 
 # ---- the room: a long, dark, wide reverb

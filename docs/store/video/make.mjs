@@ -86,11 +86,22 @@ ${script}
 `);
 }
 
-/* ---- the five screens */
+/* ---- layers: one part of a screen on its own, transparent around it (to lift off the window in the film), and the
+   screen without that part (so the lifted layer is the only copy) */
+const layerCss = (keep) => `  html, body, html.qm, html.qm body { background: transparent !important; }
+  #qm-view, #qm-dock, #qm-burger, #qm-pal-scrim, .caret { visibility: hidden !important; }
+  #qm-view, #qm-pal-scrim { background: transparent !important; }
+  ${keep}, ${keep} * { visibility: visible !important; }
+`;
+const holeCss = (sel) => `  ${sel}, ${sel} * { visibility: hidden !important; }\n`;
+
+/* ---- the screens */
 const SCREENS = {
   // the inbox arrives; one email is done (e) and goes; the cursor goes up to Lena's
-  inbox: () => screen("inbox", 6.4, {
+  inbox: (lift) => screen(lift ? "inbox-lift" : "inbox", 7.6, {
     bg: "#1f4fd6",
+    // (the two lines at the top have room for a raised panel; it shows only on the lifted layer, only while lifted)
+    css: `  .qm-brief { padding: 12px 18px; margin-left: -18px; margin-right: -18px; margin-top: -12px; border-radius: 16px; }\n` + (lift ? layerCss(".qm-brief") : holeCss(".qm-brief")),
     body: inbox(),
     script: `
     const rows = $$(".qm-row");
@@ -99,22 +110,27 @@ const SCREENS = {
     tl.fromTo(".qm-day", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 0.5);
     tl.fromTo(rows, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.07 }, 0.55);
     tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.55, ease: "back.out(1.6)" }, 1.05);
-    mark(tl, rows[2], "qm-cursor", true, 2.6);
-    tl.to(rows[2], { x: -28, opacity: 0, duration: 0.34, ease: "power2.in" }, 3.2);
+    // (while the film lifts these two lines off the screen, 1.6 to 4.0, they sit on a panel of their own)
+    tl.fromTo(".qm-brief", { backgroundColor: "rgba(52, 98, 224, 0)", boxShadow: "0 0 0 rgba(0, 10, 50, 0)" }, { backgroundColor: "rgba(52, 98, 224, 1)", boxShadow: "0 30px 70px rgba(0, 10, 50, 0.45)", duration: 0.5, ease: "power2.out" }, 1.6);
+    tl.to(".qm-brief", { backgroundColor: "rgba(52, 98, 224, 0)", boxShadow: "0 0 0 rgba(0, 10, 50, 0)", duration: 0.45, ease: "power2.in" }, 3.55);
+    // then one email is done (e), and the cursor goes up to Lena's
+    mark(tl, rows[2], "qm-cursor", true, 4.0);
+    tl.to(rows[2], { x: -28, opacity: 0, duration: 0.34, ease: "power2.in" }, 4.5);
     const h = rows[3].offsetTop - rows[2].offsetTop;
-    tl.to(rows.slice(3), { y: -h, duration: 0.55, ease: "power3.inOut" }, 3.48);
-    mark(tl, rows[3], "qm-cursor", true, 3.62);
-    mark(tl, rows[3], "qm-cursor", false, 4.3);
-    mark(tl, rows[1], "qm-cursor", true, 4.3);
-    mark(tl, rows[1], "qm-cursor", false, 4.62);
-    mark(tl, rows[0], "qm-cursor", true, 4.62);`,
+    tl.to(rows.slice(3), { y: -h, duration: 0.55, ease: "power3.inOut" }, 4.78);
+    mark(tl, rows[3], "qm-cursor", true, 4.92);
+    mark(tl, rows[3], "qm-cursor", false, 5.6);
+    mark(tl, rows[1], "qm-cursor", true, 5.6);
+    mark(tl, rows[1], "qm-cursor", false, 5.92);
+    mark(tl, rows[0], "qm-cursor", true, 5.92);`,
   }),
+  "inbox-lift": () => SCREENS.inbox(true),
 
   // Lena's conversation; a reply typed in the box, sent, and in its place
   convo: () => {
     const said = "2 works. I'll send the slides tonight.";
     const msg = (who, when, lines, mine) => `<div class="qm-msg${mine ? " qm-mine" : ""}"><div class="qm-meta">${mine ? `<span>${when}</span>` : `<span class="qm-av qm-mav qm-tint" style="background:#7c8cf0">LP</span><span><button type="button" class="qm-whois">${who}</button> · ${when}</span>`}</div><div class="qm-bwrap"><div class="qm-bubble"><div class="qm-body qm-chat">${lines.map((l) => (l ? `<div>${esc(l)}</div>` : "<div><br></div>")).join("")}</div></div></div></div>`;
-    return screen("convo", 7.4, {
+    return screen("convo", 8.0, {
       bg: "#cc1f66",
       cls: "qm qm-spacious qm-on-mail",
       css: `  .typed { position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; display: flex; align-items: center; font: 400 16px/1.5 var(--sans); color: var(--text); white-space: pre; }
@@ -175,7 +191,7 @@ const SCREENS = {
     const item = (ico, label, hint, sub) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span>${hint ? `<span class="qm-pal-hint">${hint}</span>` : ""}</div>`;
     const tag = (ico, label, sub, t) => `<div class="qm-pal-item"><span class="qm-pal-ico">{{icon:${ico}}}</span><span class="qm-pal-t"><b>${esc(label)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span><span class="qm-pal-tag">${t}</span></div>`;
     const sec = (t) => `<div class="qm-pal-sec">${t}</div>`;
-    return screen(lift ? "palette-lift" : "palette", 5.2, {
+    return screen(lift ? "palette-lift" : "palette", 5.8, {
       bg: "#0f8f4a",
       css: (lift ? `  html, body, html.qm, html.qm body { background: transparent !important; }
   #qm-view, #qm-dock, #qm-burger { visibility: hidden !important; }
@@ -221,9 +237,9 @@ const SCREENS = {
   "palette-lift": () => SCREENS.palette(true),
 
   // new mail a few times a day: four wait for the tide; let in, they arrive together at the top
-  tides: () => screen("tides", 5.6, {
+  tides: (lift) => screen(lift ? "tides-lift" : "tides", 6.6, {
     bg: "#1f4fd6",
-    css: `  .qm-calmslot { margin: -24px 0 28px; }`,
+    css: `  .qm-calmslot { margin: -24px 0 28px; }\n` + (lift ? layerCss(".qm-tidepill") : holeCss(".qm-tidepill")),
     body: inbox().replace('<div class="qm-rows qm-avs" id="rows">', `<div class="qm-calmslot"><div class="qm-cpills"><div class="qm-cpill qm-tidepill">{{icon:later}}<span>4 waiting for the tide at 3:00 PM</span><button type="button" class="letin">Let them in</button></div></div></div><div class="qm-rows qm-avs" id="rows">`),
     script: `
     const rows = $$(".qm-row"), fresh = rows.slice(0, 4), old = rows.slice(4), h = rows[1].offsetTop - rows[0].offsetTop;
@@ -235,14 +251,15 @@ const SCREENS = {
     tl.fromTo(pill, { opacity: 0, y: 10, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, 0.3);
     tl.fromTo([".qm-day", ...old], { opacity: 0 }, { opacity: 1, duration: 0.6, stagger: 0.06 }, 0.4);
     tl.fromTo("#qm-fab", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.6)" }, 0.6);
-    // let them in: the button gives, the pill goes, and the four arrive together
-    tl.fromTo(".letin", { scale: 1 }, { scale: 0.9, duration: 0.12, ease: "power2.in" }, 2.2);
-    tl.to(".letin", { scale: 1, duration: 0.25, ease: "back.out(2)" }, 2.32);
-    tl.to(pill, { opacity: 0, scale: 0.96, duration: 0.3, ease: "power2.in" }, 2.45);
-    tl.to(slot, { height: 0, marginTop: 0, marginBottom: 0, duration: 0.5, ease: "power3.inOut" }, 2.6);
-    tl.to(old, { y: 0, duration: 0.75, ease: "power3.inOut" }, 2.75);
-    tl.fromTo(fresh, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.08 }, 2.95);`,
+    // let them in (the film has lifted the pill by now): the button gives, the pill goes, the four arrive together
+    tl.fromTo(".letin", { scale: 1 }, { scale: 0.9, duration: 0.12, ease: "power2.in" }, 2.4);
+    tl.to(".letin", { scale: 1, duration: 0.25, ease: "back.out(2)" }, 2.52);
+    tl.to(pill, { opacity: 0, scale: 0.96, duration: 0.3, ease: "power2.in" }, 2.9);
+    tl.to(slot, { height: 0, marginTop: 0, marginBottom: 0, duration: 0.5, ease: "power3.inOut" }, 3.05);
+    tl.to(old, { y: 0, duration: 0.75, ease: "power3.inOut" }, 3.2);
+    tl.fromTo(fresh, { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.08 }, 3.4);`,
   }),
+  "tides-lift": () => SCREENS.tides(true),
 
   // your colors, then your pictures: the same inbox in blue, pink and green, then over three photos
   looks: () => screen("looks", 6.6, {
@@ -277,7 +294,7 @@ const SCREENS = {
       ["Updates", [["F", "Fieldnote", "10:13 AM", "Your weekly summary", "Three notebooks changed this week, and two are waiting for your review.", 1], ["C", "Cityline Transit", "8:40 AM", "Weekend service changes", "The Blue Line runs every 12 minutes on Saturday, between 9 AM and 5 PM.", 0]]],
       ["Orders", [["P", "Pine & Co.", "9:15 AM", "Your order has shipped", "Two linen shirts are on their way, arriving Tuesday, October 13.", 0]]],
     ];
-    return screen("paper", 5.2, {
+    return screen("paper", 5.8, {
       body: `
 <button id="qm-burger" type="button">{{icon:menu}}</button>
 <div id="qm-view"><div class="qm-host"><div class="qm-screen"><div><div class="qm-scroll" style="overflow:hidden"><div class="qm-inbox qm-paper">

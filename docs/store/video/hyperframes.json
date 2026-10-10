@@ -9,5 +9,22 @@
   "media": {
     "autoProxy": true
   },
-  "authoringSkill": "general-video"
+  "authoringSkill": "general-video",
+  "registryItems": [
+    {
+      "name": "screen-flow-carousel",
+      "type": "hyperframes:component",
+      "target": "compositions/components/screen-flow-carousel.html"
+    },
+    {
+      "name": "light-leak",
+      "type": "hyperframes:block",
+      "target": "compositions/light-leak.html"
+    },
+    {
+      "name": "camera-rig-depth-stack",
+      "type": "hyperframes:component",
+      "target": "compositions/components/camera-rig-depth-stack.html"
+    }
+  ]
 }
