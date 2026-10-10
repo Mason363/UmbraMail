@@ -6,7 +6,7 @@ from scipy.io import wavfile
 from scipy.signal import fftconvolve, butter, sosfilt
 
 SR = 48000
-LENGTH = 48.0
+LENGTH = 53.1
 rng = np.random.default_rng(7)
 N = int(SR * LENGTH)
 t_all = np.arange(N) / SR
@@ -18,22 +18,22 @@ def hz(note):
 
 # where the scenes change (index.html): the chords change with them
 CHORDS = [
-    (0.0, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),      # Dmaj9: the name
-    (2.6, "G2", ["B3", "D4", "F#4", "A4"]),             # Gmaj9: what needs you
-    (5.95, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9
-    (9.3, "B1", ["A3", "D4", "F#4", "C#5"]),            # Bm9: the tide
-    (12.15, "G2", ["B3", "D4", "F#4", "A4"]),           # Gmaj7
-    (15.0, "F#2", ["A3", "D4", "F#4", "E5"]),           # D/F#: a conversation
-    (18.35, "E2", ["G3", "B3", "D4", "F#4"]),           # Em9
-    (21.7, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: finding
-    (24.2, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
-    (26.7, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: the paper
-    (29.2, "G2", ["B3", "D4", "F#4", "C#5"]),           # Gmaj7#11
-    (31.7, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9: your colors
-    (34.5, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
-    (37.2, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: your pictures
-    (40.5, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
-    (43.9, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the end, and rest
+    (0.0, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),      # Dmaj9: the eclipse, and the name
+    (4.8, "G2", ["B3", "D4", "F#4", "A4"]),             # Gmaj9: what needs you
+    (8.15, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9
+    (11.5, "B1", ["A3", "D4", "F#4", "C#5"]),            # Bm9: the tide
+    (14.35, "G2", ["B3", "D4", "F#4", "A4"]),           # Gmaj7
+    (17.2, "F#2", ["A3", "D4", "F#4", "E5"]),           # D/F#: a conversation
+    (20.55, "E2", ["G3", "B3", "D4", "F#4"]),           # Em9
+    (23.9, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: finding
+    (26.4, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (28.9, "B1", ["A3", "D4", "F#4", "C#5"]),           # Bm9: the paper
+    (31.4, "G2", ["B3", "D4", "F#4", "C#5"]),           # Gmaj7#11
+    (33.9, "E2", ["G3", "D4", "F#4", "B4"]),            # Em9: your colors
+    (36.7, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (39.4, "G2", ["B3", "D4", "F#4", "A4"]),            # Gmaj9: your pictures
+    (42.7, "A2", ["G3", "C#4", "E4", "B4"]),            # A13sus
+    (46.1, "D2", ["A3", "D4", "F#4", "C#5", "E5"]),     # Dmaj9: the eclipse again, the name, and rest
 ]
 ends = [c[0] for c in CHORDS[1:]] + [LENGTH]
 
@@ -99,17 +99,17 @@ for (start, bass, notes), end in zip(CHORDS, ends):
         place(ep(hz(nm), 1.0 - i * 0.08), start + 0.02 + i * 0.045, pan=-0.35 + i * 0.18)
 
 # a few quiet notes on top, from the scale, between the chords
-MELODY = [(3.9, "F#5"), (4.8, "A5"), (7.0, "B5"), (10.4, "C#6"), (11.3, "A5"), (13.4, "F#5"), (16.3, "E5"), (17.0, "F#5"),
-          (19.7, "B5"), (22.8, "A5"), (25.3, "E5"), (27.9, "F#5"), (28.6, "C#6"), (30.3, "B5"), (32.8, "A5"), (33.6, "B5"),
-          (35.7, "B5"), (38.0, "F#5"), (38.8, "A5"), (41.4, "E5"), (44.9, "A5"), (45.8, "F#5")]
+MELODY = [(2.7, "F#5"), (3.5, "A5"), (6.1, "F#5"), (7, "A5"), (9.2, "B5"), (12.6, "C#6"), (13.5, "A5"), (15.6, "F#5"), (18.5, "E5"), (19.2, "F#5"),
+          (21.9, "B5"), (25, "A5"), (27.5, "E5"), (30.1, "F#5"), (30.8, "C#6"), (32.5, "B5"), (35, "A5"), (35.8, "B5"),
+          (37.9, "B5"), (40.2, "F#5"), (41, "A5"), (43.6, "E5"), (48.3, "A5"), (49.1, "F#5"), (50.4, "E5")]
 for when, nm in MELODY:
     place(ep(hz(nm), 0.62, 3.6), when, pan=0.25, gain=1.0)
 
-# ---- a soft arpeggio through each chord (eighth notes, 92 a minute), from the first screen until the end card
+# ---- a soft arpeggio through each chord (eighth notes, 92 a minute), from the first screen until the end
 step = 60 / 92 / 2
-t = 2.6
+t = 4.8
 k = 0
-while t < 43.9 - 0.05:
+while t < 46.1 - 0.05:
     chord = [c for c in CHORDS if c[0] <= t + 1e-6][-1]
     tones = chord[2][1:4] + [chord[2][2]]
     nm = tones[k % len(tones)]
@@ -119,14 +119,14 @@ while t < 43.9 - 0.05:
     t += step
     k += 1
 
-# ---- a chime as each scene arrives: two high partials, very soft
+# ---- a chime as each scene arrives, and as the light breaks out from behind the moon: two high partials, very soft
 def chime(f):
     n = int(3.0 * SR)
     t = np.arange(n) / SR
     s = np.sin(2 * np.pi * f * t) + 0.35 * np.sin(2 * np.pi * f * 2.76 * t) * np.exp(-t * 3)
     return s * np.minimum(1, t / 0.006) * np.exp(-t * 1.6) * 0.035
 
-for when, nm in [(2.6, "A6"), (9.3, "F#6"), (15.0, "A6"), (21.7, "B6"), (26.7, "F#6"), (31.7, "A6"), (37.2, "F#6"), (43.9, "A6")]:
+for when, nm in [(1.3, "A6"), (4.8, "A6"), (11.5, "F#6"), (17.2, "A6"), (23.9, "B6"), (28.9, "F#6"), (33.9, "A6"), (39.4, "F#6"), (47.4, "A6")]:
     place(chime(hz(nm)), when, pan=0.4)
 
 # ---- the room: a long, dark, wide reverb

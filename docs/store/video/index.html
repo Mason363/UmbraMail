@@ -29,21 +29,20 @@
   .ln { display: block; white-space: nowrap; }
   .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.14em; margin-bottom: -0.14em; }
   .i { display: inline-block; }
-  .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-  .name { display: block; font: 380 176px/1 "Newsreader", Georgia, serif; letter-spacing: -0.03em; }
-  .tag { display: block; margin-top: 28px; font: 400 40px/1.3 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.8); }
-  .small { display: block; margin-top: 48px; font: 400 26px/1.5 "Instrument Sans", system-ui, sans-serif; color: rgba(243, 242, 239, 0.55); }
+
+  /* the eclipse at each end, drawn frame by frame (eclipse.py) */
+  .full { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; display: block; }
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="48" data-fps="60" data-width="1920" data-height="1080">
+<div id="root" data-composition-id="main" data-start="0" data-duration="53.1" data-fps="60" data-width="1920" data-height="1080">
 
   <div class="amb" id="amb">
-    <video id="a-inbox" class="clip" src="assets/clips/glow-inbox.mp4" muted playsinline data-start="2.6" data-duration="8.3" data-track-index="1"></video>
-    <video id="a-tides" class="clip" src="assets/clips/glow-tides.mp4" muted playsinline data-start="9.3" data-duration="7.3" data-track-index="2"></video>
-    <video id="a-convo" class="clip" src="assets/clips/glow-convo.mp4" muted playsinline data-start="15.0" data-duration="8.3" data-track-index="1"></video>
-    <video id="a-palette" class="clip" src="assets/clips/glow-palette.mp4" muted playsinline data-start="21.7" data-duration="6.6" data-track-index="2"></video>
-    <video id="a-paper" class="clip" src="assets/clips/glow-paper.mp4" muted playsinline data-start="26.7" data-duration="6.6" data-track-index="1"></video>
+    <video id="a-inbox" class="clip" src="assets/clips/glow-inbox.mp4" muted playsinline data-start="4.8" data-duration="8.3" data-track-index="1"></video>
+    <video id="a-tides" class="clip" src="assets/clips/glow-tides.mp4" muted playsinline data-start="11.5" data-duration="7.3" data-track-index="2"></video>
+    <video id="a-convo" class="clip" src="assets/clips/glow-convo.mp4" muted playsinline data-start="17.2" data-duration="8.3" data-track-index="1"></video>
+    <video id="a-palette" class="clip" src="assets/clips/glow-palette.mp4" muted playsinline data-start="23.9" data-duration="6.6" data-track-index="2"></video>
+    <video id="a-paper" class="clip" src="assets/clips/glow-paper.mp4" muted playsinline data-start="28.9" data-duration="6.6" data-track-index="1"></video>
     <img id="a-blue" src="assets/looks/glow-blue.jpg" alt="" />
     <img id="a-pink" src="assets/looks/glow-pink.jpg" alt="" />
     <img id="a-green" src="assets/looks/glow-green.jpg" alt="" />
@@ -54,11 +53,11 @@
 
   <!-- each screen plays on, still, until the wipe over it is done -->
   <div class="win" id="win">
-    <div class="scr" id="s-inbox"><video id="v-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="2.6" data-duration="8.3" data-track-index="3"></video></div>
-    <div class="scr" id="s-tides"><video id="v-tides" class="clip" src="assets/clips/tides.mp4" muted playsinline data-start="9.3" data-duration="7.3" data-track-index="4"></video></div>
-    <div class="scr" id="s-convo"><video id="v-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="15.0" data-duration="8.3" data-track-index="3"></video></div>
-    <div class="scr" id="s-palette"><video id="v-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="21.7" data-duration="6.6" data-track-index="4"></video></div>
-    <div class="scr" id="s-paper"><video id="v-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="26.7" data-duration="6.6" data-track-index="3"></video></div>
+    <div class="scr" id="s-inbox"><video id="v-inbox" class="clip" src="assets/clips/inbox.mp4" muted playsinline data-start="4.8" data-duration="8.3" data-track-index="3"></video></div>
+    <div class="scr" id="s-tides"><video id="v-tides" class="clip" src="assets/clips/tides.mp4" muted playsinline data-start="11.5" data-duration="7.3" data-track-index="4"></video></div>
+    <div class="scr" id="s-convo"><video id="v-convo" class="clip" src="assets/clips/convo.mp4" muted playsinline data-start="17.2" data-duration="8.3" data-track-index="3"></video></div>
+    <div class="scr" id="s-palette"><video id="v-palette" class="clip" src="assets/clips/palette.mp4" muted playsinline data-start="23.9" data-duration="6.6" data-track-index="4"></video></div>
+    <div class="scr" id="s-paper"><video id="v-paper" class="clip" src="assets/clips/paper.mp4" muted playsinline data-start="28.9" data-duration="6.6" data-track-index="3"></video></div>
     <div class="scr" id="s-blue"><img src="assets/looks/blue.png" alt="" /></div>
     <div class="scr" id="s-pink"><img src="assets/looks/pink.png" alt="" /></div>
     <div class="scr" id="s-green"><img src="assets/looks/green.png" alt="" /></div>
@@ -67,29 +66,22 @@
     <div class="scr" id="s-sea"><img src="assets/looks/sea.png" alt="" /></div>
   </div>
 
-  <section id="h1" class="clip hl" data-start="3.0" data-duration="6.85" data-track-index="5"><p><span class="ln">What needs you,</span><span class="ln">at the top.</span></p></section>
-  <section id="h2" class="clip hl" data-start="9.5" data-duration="6.05" data-track-index="6"><p><span class="ln">New mail,</span><span class="ln">a few times a day.</span></p></section>
-  <section id="h3" class="clip hl" data-start="15.2" data-duration="7.05" data-track-index="5"><p><span class="ln">Email that reads</span><span class="ln">like messages.</span></p></section>
-  <section id="h4" class="clip hl" data-start="21.9" data-duration="5.35" data-track-index="6"><p><span class="ln">Find any email</span><span class="ln">in a few letters.</span></p></section>
-  <section id="h5" class="clip hl" data-start="26.9" data-duration="5.35" data-track-index="5"><p><span class="ln">Newsletters,</span><span class="ln">in one page.</span></p></section>
-  <section id="h6" class="clip hl" data-start="31.9" data-duration="11.6" data-track-index="6"><p><span class="ln">Your colors.</span><span class="ln">Your pictures.</span></p></section>
+  <section id="h1" class="clip hl" data-start="5.2" data-duration="6.85" data-track-index="5"><p><span class="ln">What needs you,</span><span class="ln">at the top.</span></p></section>
+  <section id="h2" class="clip hl" data-start="11.7" data-duration="6.05" data-track-index="6"><p><span class="ln">New mail,</span><span class="ln">a few times a day.</span></p></section>
+  <section id="h3" class="clip hl" data-start="17.4" data-duration="7.05" data-track-index="5"><p><span class="ln">Email that reads</span><span class="ln">like messages.</span></p></section>
+  <section id="h4" class="clip hl" data-start="24.1" data-duration="5.35" data-track-index="6"><p><span class="ln">Find any email</span><span class="ln">in a few letters.</span></p></section>
+  <section id="h5" class="clip hl" data-start="29.1" data-duration="5.35" data-track-index="5"><p><span class="ln">Newsletters,</span><span class="ln">in one page.</span></p></section>
+  <section id="h6" class="clip hl" data-start="34.1" data-duration="11.6" data-track-index="6"><p><span class="ln">Your colors.</span><span class="ln">Your pictures.</span></p></section>
 
-  <section id="title" class="clip card" data-start="0" data-duration="3.0" data-track-index="0">
-    <span class="name" id="t-name">Umbra</span>
-    <span class="tag" id="t-tag">A calmer Gmail.</span>
-  </section>
-  <section id="end" class="clip card" data-start="43.9" data-duration="4.1" data-track-index="0">
-    <span class="name" id="e-name">Umbra</span>
-    <span class="tag" id="e-tag">A calmer Gmail.</span>
-    <span class="small" id="e-small">Private, free and open source · umbra.masn.studio</span>
-  </section>
+  <video id="v-intro" class="clip full" src="assets/clips/eclipse-intro.mp4" muted playsinline data-start="0" data-duration="4.8" data-track-index="0"></video>
+  <video id="v-outro" class="clip full" src="assets/clips/eclipse-outro.mp4" muted playsinline data-start="46.1" data-duration="7.0" data-track-index="0"></video>
 
-  <audio id="bed" src="assets/bed.wav" data-start="0" data-duration="48" data-track-index="7" data-volume="1"></audio>
+  <audio id="bed" src="assets/bed.wav" data-start="0" data-duration="53.1" data-track-index="7" data-volume="1"></audio>
 </div>
 <script>
-  // words and letters, each in a mask it rises out of
-  const masked = (el, by) => {
-    const wrap = (t) => (by === "letter" ? [...t] : t.trim().split(" ")).map((p) => `<span class="w" data-layout-allow-overflow><span class="i">${p === " " ? "&nbsp;" : p}</span></span>`).join(by === "letter" ? "" : " ");
+  // words, each in a mask it rises out of
+  const masked = (el) => {
+    const wrap = (t) => t.trim().split(" ").map((p) => `<span class="w" data-layout-allow-overflow><span class="i">${p}</span></span>`).join(" ");
     const lines = [...el.querySelectorAll(".ln")];
     if (lines.length) lines.forEach((l) => { l.innerHTML = wrap(l.textContent); });
     else el.innerHTML = wrap(el.textContent);
@@ -111,46 +103,38 @@
     };
     tl.set(".scr:not(#s-inbox)", { clipPath: "inset(0% 0% 0% 100%)" }, 0);
 
-    // the name
-    const tName = masked(document.getElementById("t-name"), "letter"), tTag = masked(document.getElementById("t-tag"));
-    rise(tName, 0.25, 0.055, 1.2);
-    rise(tTag, 0.95, 0.07);
-    leave([...tName, ...tTag], 2.2, 0.02);
+    // (first, the eclipse: the moon moves off the sun and leaves the name on it; then the light goes out)
 
     // the window settles in, and its light with it
-    tl.fromTo("#win", { opacity: 0 }, { opacity: 1, duration: 1.1, ease: "sine.inOut" }, 2.6);
-    tl.fromTo("#amb", { opacity: 0 }, { opacity: 0.5, duration: 1.6, ease: "sine.inOut" }, 2.6);
-    tl.fromTo("#a-inbox", { opacity: 0 }, { opacity: 1, duration: 0.1 }, 2.6);
+    tl.fromTo("#win", { opacity: 0 }, { opacity: 1, duration: 1.1, ease: "sine.inOut" }, 4.8);
+    tl.fromTo("#amb", { opacity: 0 }, { opacity: 0.5, duration: 1.6, ease: "sine.inOut" }, 4.8);
+    tl.fromTo("#a-inbox", { opacity: 0 }, { opacity: 1, duration: 0.1 }, 4.8);
 
-    line("#h1", 3.1, 8.95);
-    reveal("inbox", "tides", 9.3);
-    line("#h2", 9.6, 14.65);
-    reveal("tides", "convo", 15.0);
-    line("#h3", 15.3, 21.35);
-    reveal("convo", "palette", 21.7);
-    line("#h4", 22.0, 26.35);
-    reveal("palette", "paper", 26.7);
-    line("#h5", 27.0, 31.35);
+    line("#h1", 5.3, 11.15);
+    reveal("inbox", "tides", 11.5);
+    line("#h2", 11.8, 16.85);
+    reveal("tides", "convo", 17.2);
+    line("#h3", 17.5, 23.55);
+    reveal("convo", "palette", 23.9);
+    line("#h4", 24.2, 28.55);
+    reveal("palette", "paper", 28.9);
+    line("#h5", 29.2, 33.55);
 
     // your colors, then your pictures: each wiped in over the last, once the last is all in and has been seen
-    reveal("paper", "blue", 31.7);
+    reveal("paper", "blue", 33.9);
     const h6 = masked(document.querySelector("#h6 p")), pictures = [...document.querySelectorAll("#h6 .ln")[1].querySelectorAll(".i")];
-    rise(h6.filter((w) => !pictures.includes(w)), 32.0);
-    reveal("blue", "pink", 33.6, 1.2);
-    reveal("pink", "green", 35.4, 1.2);
-    reveal("green", "mountains", 37.2, 1.2);
-    rise(pictures, 37.5);
-    reveal("mountains", "sunset", 39.0, 1.2);
-    reveal("sunset", "sea", 40.8, 1.2);
-    leave(h6, 42.6);
+    rise(h6.filter((w) => !pictures.includes(w)), 34.2);
+    reveal("blue", "pink", 35.8, 1.2);
+    reveal("pink", "green", 37.6, 1.2);
+    reveal("green", "mountains", 39.4, 1.2);
+    rise(pictures, 39.7);
+    reveal("mountains", "sunset", 41.2, 1.2);
+    reveal("sunset", "sea", 43.0, 1.2);
+    leave(h6, 44.8);
 
-    // the window goes, and the name returns
-    tl.to("#win", { opacity: 0, duration: 1.0, ease: "sine.inOut" }, 42.9);
-    tl.to("#amb", { opacity: 0, duration: 1.0, ease: "sine.inOut" }, 42.9);
-    rise(masked(document.getElementById("e-name"), "letter"), 44.1, 0.055, 1.2);
-    rise(masked(document.getElementById("e-tag")), 44.8, 0.07);
-    rise(masked(document.getElementById("e-small")), 45.4, 0.03);
-    tl.to("#end", { opacity: 0, duration: 0.8, ease: "sine.in" }, 47.2);
+    // the window goes; the eclipse again, and the name with where to find it
+    tl.to("#win", { opacity: 0, duration: 1.0, ease: "sine.inOut" }, 45.1);
+    tl.to("#amb", { opacity: 0, duration: 1.0, ease: "sine.inOut" }, 45.1);
 
     window.__timelines["main"] = tl;
   });

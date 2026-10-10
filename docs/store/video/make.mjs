@@ -2,7 +2,8 @@
 // HyperFrames compositions (ui/*.html, 1280 × 720, drawn at 4K and kept at 2560 × 1440).
 //   node make.mjs ui      writes assets/ and ui/ (after `npm run build` in the repository)
 //   node make.mjs photos  fetches the three background photos into assets/photos/
-//   node make.mjs clips   renders each screen into assets/clips/, and each look (a color or a photo) into assets/looks/
+//   node make.mjs clips   renders each screen into assets/clips/, each look (a color or a photo) into assets/looks/, and
+//                         the words for the eclipse at each end into assets/eclipse/ (then python3 eclipse.py)
 // The photos (assets/photos/) are from Unsplash, under the Unsplash License: misty mountains (photo-1552152370-fb05b25ff17d),
 // a sunset at sea by Hannah Reding (photo-1554213808-9c5bab0f624e), a pink sea by Clark Gu (photo-1707489636403-c539c2cdc101).
 // index.html puts them together, with the words and the music (assets/bed.wav, from music.py).
@@ -277,6 +278,36 @@ const look = (id, { bg, photo, at = "50% 50%" }) => photo
   })
   : screen("look-" + id, 0.2, { bg, body: inbox(5) });
 
+/* ---- the words the eclipse leaves on the sun at each end (eclipse.py): white on black, where they sit on its face */
+const LOCKUPS = {
+  intro: ["Umbra", "A calmer Gmail."],
+  outro: ["Umbra", "A calmer Gmail.", "Private, free and open source · umbra.masn.studio"],
+};
+const lockup = (id, [name, tag, small]) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  @font-face { font-family: "Newsreader"; font-weight: 200 800; src: url("../assets/fonts/newsreader-latin-opsz-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Instrument Sans"; font-weight: 400 700; src: url("../assets/fonts/instrument-sans-latin-wght-normal.woff2") format("woff2"); }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+  #root { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; -webkit-font-smoothing: antialiased; }
+  .name { font: 380 200px/1 "Newsreader", Georgia, serif; letter-spacing: -0.03em; }
+  .tag { margin-top: 26px; font: 400 42px/1.3 "Instrument Sans", system-ui, sans-serif; }
+  .small { margin-top: 34px; font: 500 25px/1.5 "Instrument Sans", system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="lockup-${id}" data-start="0" data-duration="0.2" data-width="1920" data-height="1080">
+  <span class="name">${esc(name)}</span><span class="tag">${esc(tag)}</span>${small ? `<span class="small">${esc(small)}</span>` : ""}
+</div>
+<script>document.fonts.ready.then(() => { window.__timelines["lockup-${id}"] = gsap.timeline({ paused: true }); });</script>
+</body>
+</html>
+`;
+
 /* ---- the photos (Unsplash License; see the top of this file) */
 const PHOTOS = { mountains: "1552152370-fb05b25ff17d", sunset: "1554213808-9c5bab0f624e", sea: "1707489636403-c539c2cdc101" };
 async function getPhotos() {
@@ -297,6 +328,7 @@ function writeUI() {
   for (const f of readdirSync(SITE + "fonts/")) if (f.endsWith(".woff2")) copyFileSync(SITE + "fonts/" + f, at("./assets/fonts/" + f));
   for (const [id, make] of Object.entries(SCREENS)) { writeFileSync(at(`./ui/${id}.html`), make()); console.log("  ui/" + id + ".html"); }
   for (const [id, o] of Object.entries(LOOKS)) { writeFileSync(at(`./ui/look-${id}.html`), look(id, o)); console.log("  ui/look-" + id + ".html"); }
+  for (const [id, o] of Object.entries(LOCKUPS)) { writeFileSync(at(`./ui/lockup-${id}.html`), lockup(id, o)); console.log("  ui/lockup-" + id + ".html"); }
 }
 
 /* ---- render: each screen at 4K (3 × its 1280 × 720), then scaled to 2560 × 1440; and each look, a still the same way.
@@ -324,6 +356,16 @@ function renderClips(only) {
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frame, "-vf", "scale=2560:1440:flags=lanczos", "-pix_fmt", "rgb24", at(`./assets/looks/${id}.png`)]);
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frame, "-vf", "scale=640:360:flags=area", "-q:v", "3", at(`./assets/looks/glow-${id}.jpg`)]);
     console.log("  assets/looks/" + id + ".png");
+  }
+  // the words, drawn at 4K and brought down to 1920 × 1080: a soft-edged mask for eclipse.py
+  mkdirSync(at("./assets/eclipse/"), { recursive: true });
+  for (const id of Object.keys(LOCKUPS)) {
+    if (only.length && !only.includes("eclipse")) continue;
+    const dir = at(`./renders/lockup-${id}/`);
+    render(["-c", `ui/lockup-${id}.html`, "--fps", "10", "--format", "png-sequence", "-o", dir]);
+    const frame = dir + readdirSync(dir).filter((f) => f.endsWith(".png")).sort()[0];
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", frame, "-vf", "scale=1920:1080:flags=area,format=gray", at(`./assets/eclipse/words-${id}.png`)]);
+    console.log("  assets/eclipse/words-" + id + ".png");
   }
 }
 
