@@ -11,7 +11,7 @@ Umbra collects zero data. There's no Umbra server and no analytics. AI is off un
 ## Install
 
 - **Userscript, any browser:** install it from [umbra.masn.studio](https://umbra.masn.studio/#install) with [Violentmonkey](https://violentmonkey.github.io/get-it/) or [Tampermonkey](https://www.tampermonkey.net/). It updates from there.
-- **Chrome extension:** coming to the Chrome Web Store. Until then, download [the .zip](https://umbra.masn.studio/umbra-extension.zip), unzip it, turn on Developer mode in `chrome://extensions`, and choose Load unpacked. It needs Chrome 116 or later.
+- **Chrome extension:** [in the Chrome Web Store](https://chromewebstore.google.com/detail/umbra-mail/knncmggokkablenghpnhicpamlnhfpip). It needs Chrome 116 or later.
 - **From source:** `npm run build`, then install `dist/umbra.user.js`, or load `dist/extension/` unpacked.
 
 The first time Gmail opens with Umbra, a short welcome plays: an eclipse, what Umbra is, how new mail should arrive, and whether to use AI (with the provider's terms to agree to). ⌘K › Welcome to Umbra shows it again.

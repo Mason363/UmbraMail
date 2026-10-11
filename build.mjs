@@ -139,7 +139,7 @@ if (existsSync(at("./site/index.html"))) {
   writeFileSync(at(out + "demo.html"), readFileSync(at("./site/demo.html"), "utf8").replace(/\{\{icon:([a-z]+)\}\}/g, (m, n) => icons(n)));
   copyFileSync(at("./dist/umbra.user.js"), at(out + "umbra.user.js"));
   copyFileSync(at("./dist/umbra.meta.js"), at(out + "umbra.meta.js"));
-  // the extension, zipped (for Load unpacked until it's in the Chrome Web Store)
+  // the extension, zipped (the package for the Chrome Web Store)
   const { execFileSync } = await import("node:child_process");
   const { fileURLToPath } = await import("node:url");
   execFileSync("zip", ["-r", "-X", "-q", fileURLToPath(at(out + "umbra-extension.zip")), "."], { cwd: fileURLToPath(at("./dist/extension/")) });
