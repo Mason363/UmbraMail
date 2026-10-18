@@ -34,14 +34,15 @@ const store = {
 };
 // a first run on this browser: AI stays off until you say yes (the welcome asks)
 const FRESH = store.get("prefs3", null) == null;
-const prefs = Object.assign({
+const PREF_DEFAULTS = Object.freeze({
   brief: true, summaries: "auto", expand: true, darken: true, sidePanel: false, ask: true,
   order: "date", density: "spacious", avatars: true, needs: true, dimAuto: true, gemini: true, ideas: "focus", colors: {},
   counts: "today", soft: false, size: "normal", lines: false, readWidth: 880, autoColors: true, bg: { kind: "none", color: "#0f1012", dim: 0.6 },
   chip: "full", edge: false, side: "left", rail: false, burger: true, fab: true, split: false, paneW: 380, uiFont: "instrument", readFont: "sans",
   keys: {}, briefs: {}, gem: {}, gemSheet: "", gemAccount: "", ai: !FRESH, theme: "dark",
   motion: "system", glass: 0, grain: 0, accentFollow: false, trackers: true, recall: true, flourish: true, sendSound: false, scrollTitle: false,
-}, store.get("prefs3", {}));
+});
+const prefs = Object.assign(JSON.parse(JSON.stringify(PREF_DEFAULTS)), store.get("prefs3", {}));
 // (already using Umbra from before there was a welcome: none. A first run says so at once, so a reload before
 // the welcome is answered still shows it)
 if (FRESH) store.set("welcomed", false);
@@ -56,8 +57,8 @@ if (!prefs.mig17) { if (prefs.density === "comfy") prefs.density = "spacious"; p
 let enabled = true; // never stored: Umbra is always on when Gmail loads
 // a change made in another tab (a name, a colour, a setting) shows here at once
 if (typeof GM_addValueChangeListener === "function") {
-  GM_addValueChangeListener("prefs3", (k, old, val, remote) => { if (remote && val) { Object.assign(prefs, val); setTimeout(() => { applyPrefs(); applyColors(); applyLook(); applyFinish(); applyUserCss(); keyHints(); renderAccounts(); calmTick(); aiSwitched(); everyKeys = ["!redraw"]; lastThreadSig = ""; invalidate(true); }); } });
-  GM_addValueChangeListener("contacts", (k, old, val, remote) => { if (remote && val) { contacts = val; setTimeout(() => invalidate(true)); } });
+  GM_addValueChangeListener("prefs3", (k, old, val, remote) => { if (remote) { const v = val || {}; for (const key of Object.keys(prefs)) if (!(key in v) && !(key in PREF_DEFAULTS)) delete prefs[key]; Object.assign(prefs, JSON.parse(JSON.stringify(PREF_DEFAULTS)), v); setTimeout(() => { applyPrefs(); applyColors(); applyLook(); applyFinish(); applyUserCss(); keyHints(); renderAccounts(); calmTick(); aiSwitched(); everyKeys = ["!redraw"]; lastThreadSig = ""; invalidate(true); }); } });
+  GM_addValueChangeListener("contacts", (k, old, val, remote) => { if (remote && val) { contacts = val; setTimeout(() => { lastThreadSig = ""; invalidate(true); }); } });
   GM_addValueChangeListener("bg-img", (k, old, val, remote) => { if (remote) setTimeout(applyLook); });
   GM_addValueChangeListener("read-here", (k, old, val, remote) => { if (remote && val) setTimeout(() => { readHere.clear(); for (const [id, o] of Object.entries(val)) readHere.set(id, o); everyKeys = ["!redraw"]; invalidate(true); }); });
 }
@@ -78,7 +79,8 @@ function addStyle(css) {
   (document.head || ROOT).appendChild(s);
   return s;
 }
-addStyle(UMBRA_CSS);
+// (kept: plain Gmail switches the whole stylesheet off, so nothing of Umbra's look is left on Gmail)
+const umbraStyle = (() => { const s = addStyle(UMBRA_CSS); if (s && "disabled" in s) return s; return [...document.querySelectorAll("style")].find((x) => (x.textContent || "").includes("Umbra for Gmail — Quiet")) || null; })();
 function removeOldCopies() {
   for (const st of document.querySelectorAll("style")) {
     const t = st.textContent || "";
@@ -96,8 +98,10 @@ window.addEventListener("resize", () => { if (ROOT.classList.contains("qm-bgimg"
 try { window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (prefs.theme === "system") { applyLook(); lastThreadSig = ""; invalidate(true); } }); } catch (e) { /* no media queries */ }
 const isLight = () => ROOT.classList.contains("qm-light");
 if (typeof GM_registerMenuCommand === "function") {
-  GM_registerMenuCommand("Umbra Mail settings", () => openPanel());
-  GM_registerMenuCommand("Show plain Gmail in this tab", () => plainGmail(enabled));
+  // (the Chrome extension's toolbar button runs the first: with Umbra off in this tab, it brings it back)
+  GM_registerMenuCommand("Umbra Mail settings", () => { if (enabled) openPanel(); else plainGmail(false); });
+  GM_registerMenuCommand("Show plain Gmail in this tab", () => plainGmail(true));
+  GM_registerMenuCommand("Show Umbra in this tab", () => plainGmail(false));
 }
 
 /* =================================================================== small helpers */
@@ -105,6 +109,8 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const visible = (el) => !!el && el.getClientRects().length > 0;
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+// (Chrome and the browsers built on it keep ⌘1–9 for their own tabs; Firefox and Zen let them through to the page)
+const TABS_KEEP_NUMBERS = /Chrome\//.test(navigator.userAgent || "") && !/Firefox\//.test(navigator.userAgent || "");
 const MOD_KEY = IS_MAC ? "⌘" : "Ctrl ";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const text = (el) => (el ? el.textContent.replace(/\s+/g, " ").trim() : "");
@@ -231,10 +237,11 @@ function press(el) {
 }
 function key(k, target = document.activeElement || document.body) {
   const code = k === "Escape" ? 27 : k.toUpperCase().charCodeAt(0);
-  for (const t of ["keydown", "keyup"]) target.dispatchEvent(new KeyboardEvent(t, { key: k, keyCode: code, which: code, bubbles: true, cancelable: true }));
+  for (const t of ["keydown", "keyup"]) target.dispatchEvent(new KeyboardEvent(t, { key: k, code: k === "Escape" ? "Escape" : "Key" + k.toUpperCase(), keyCode: code, which: code, bubbles: true, cancelable: true }));
 }
 
 const EMAIL_RE = /([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/;
+const EMAIL_RE_ALL = new RegExp(EMAIL_RE.source, "g");
 // Gmail's own title for the tab (the tab itself may show a calmer one: Settings › Calm)
 let rawTitle = document.title;
 /* while Umbra looks at another of Gmail's pages out of sight (your to-dos, a search for the AI), the tab keeps the
@@ -248,7 +255,9 @@ function holdTitle() {
 }
 const gmailTitle = () => (calmTitle.mine && document.title === calmTitle.mine ? rawTitle : document.title);
 const accountEmail = () => {
-  const m = gmailTitle().match(EMAIL_RE);
+  // (Gmail's title is "Subject - you@example.com - Gmail": the last address in it is yours, whatever the subject holds)
+  const all = [...gmailTitle().matchAll(EMAIL_RE_ALL)];
+  const m = all[all.length - 1];
   if (m) return m[1].toLowerCase();
   const a = (typeof accounts !== "undefined" ? accounts : []).find((x) => x.index === accountIndex());
   return a ? a.email : "";
@@ -256,7 +265,34 @@ const accountEmail = () => {
 const accountIndex = () => { const m = location.pathname.match(/\/mail\/u\/(\d+)/); return m ? Number(m[1]) : 0; };
 function hashString(s) { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); } return (x >>> 0).toString(36); }
 const hashNow = () => (location.hash || "#inbox").split("?")[0];
-const go = (hash) => { location.hash = hash; };
+/* Gmail shows one page at a time, and now and then Umbra borrows it out of sight for a moment (to act on a conversation
+   Gmail's page doesn't have, or to read a folder). Where you ask to go meanwhile is drawn at once from what Umbra
+   knows, and Gmail goes there the moment it's back, so what Umbra was doing for you isn't cut short either. */
+let waitingGo = "";
+const looking = () => ghost || peeking || aiPeeking > 0;
+const go = (hash) => {
+  if (looking()) { waitingGo = hash; peekAbort = true; invalidate(true); return; }
+  waitingGo = "";
+  location.hash = hash;
+};
+/* back from a look out of sight: where you asked to go meanwhile, now */
+function goWaiting() {
+  const next = waitingGo;
+  waitingGo = "";
+  if (!next) return;
+  if (opening) opening.at = Date.now(); // (what you opened is being opened now: its wait starts now)
+  if (hashNow() !== next.split("?")[0]) location.hash = next;
+}
+/* a conversation's own action (Reply, Done, its menu, a star) while Umbra is out of sight on another conversation:
+   done the moment it's back, on this one (Gmail's buttons are this conversation's again by then) */
+const afterLook = () => until(() => !looking() && !waitingGo, 15000, 40);
+let ghostFn = false; // (Umbra's own action on a conversation it opened out of sight is running: that one goes ahead)
+const lookBusy = () => (looking() || !!waitingGo) && !ghostFn;
+function onThisThread(fn) {
+  if (!lookBusy()) return fn();
+  const key = screen.key;
+  return afterLook().then(() => (screen.key === key ? fn() : undefined));
+}
 
 // a short note at the bottom; with `act` ({ label, run }) it carries a button (Undo) and stays a little longer,
 // and as long as the pointer rests on it
@@ -267,7 +303,7 @@ function toast(msg, act, stay) {
     act ? h("button", { type: "button", onclick: () => { out(); act.run(); } }, act.label) : null,
     h("button", { type: "button", class: "qm-gx", "aria-label": "Dismiss", title: "Dismiss", onclick: () => out() }, icon("x")));
   const out = () => { clearTimeout(t._qmTimer); if (!t.isConnected) return; t.classList.add("qm-out"); setTimeout(() => t.remove(), 220); };
-  const later = () => { clearTimeout(t._qmTimer); if (!stay) t._qmTimer = setTimeout(out, act ? 6000 : 2400); };
+  const later = () => { clearTimeout(t._qmTimer); if (!stay) t._qmTimer = setTimeout(out, Math.min(10000, (act ? 6000 : 2400) + Math.max(0, String(msg).length - 40) * 45)); };
   t.addEventListener("pointerenter", () => clearTimeout(t._qmTimer));
   // Gmail's own note is up (mirrored): this one sits just above it rather than on top of it
   const g = document.getElementById("qm-gtoast");
@@ -283,8 +319,9 @@ function toast(msg, act, stay) {
    helper(path, body) is the one way in (its paths are those of the helper app Umbra once had). */
 let ai = { reachable: false, ready: false };
 const IN_EXTENSION = typeof globalThis.UMBRA_EXTENSION !== "undefined";
-// (the extension was updated or turned off under this tab: this copy can't save anything any more, so it says so)
-window.addEventListener("umbra:stale", () => toast("Umbra was updated or turned off in Chrome. Reload Gmail to keep using it.", { label: "Reload", run: () => location.reload() }, true));
+// (the extension was updated or turned off under this tab: this copy can't save anything any more, so it steps
+// aside completely, Gmail as Gmail draws it, and says how to get it back)
+window.addEventListener("umbra:stale", () => plainGmail(true, "stale"));
 function helper(path, body, timeout = 120000) {
   // (AI off: nothing of your mail goes anywhere, whichever part of Umbra asks, even one that asked before it was turned off;
   // setting up — a key, ChatGPT's sign-in — sends none of it)
@@ -322,6 +359,7 @@ function remember(k, v) {
 }
 const pendingAI = new Set();
 const failedAI = new Map(); // failures are kept in memory only and retried after a while
+const aiWhy = new Map(); // what the provider said when it failed (shown where the answer would be)
 function ask(k, payload, onDone) {
   if (!aiOn()) return null;
   if (aiCache.has(k)) return aiCache.get(k);
@@ -332,7 +370,7 @@ function ask(k, payload, onDone) {
   countAI();
   helper("/summarize", payload)
     .then((res) => { remember(k, res); })
-    .catch(() => { failedAI.set(k, Date.now()); while (failedAI.size > 300) failedAI.delete(failedAI.keys().next().value); })
+    .catch((e) => { failedAI.set(k, Date.now()); aiWhy.set(k, (e && e.message) || "The AI didn't answer."); while (failedAI.size > 300) { const old = failedAI.keys().next().value; failedAI.delete(old); aiWhy.delete(old); } })
     .finally(() => { pendingAI.delete(k); onDone(); });
   return undefined;
 }
@@ -541,6 +579,7 @@ function searchHere(query, limit = 12, raw) {
       // back where it was, unless you went somewhere yourself meanwhile
       if (hashNow() === folder && back !== folder) location.replace(back);
       release();
+      if (aiPeeking <= 1 && !ghost && !peeking) goWaiting();
       setTimeout(() => { aiPeeking--; invalidate(true); }, 120);
     }
   });
@@ -558,7 +597,7 @@ async function searchThere(acct, query) {
     await wait(1500);
   }
   const asked = Date.now();
-  store.set("want", { email: acct.email, folder, pages: 1, at: asked, tab: TAB_ID });
+  askTab({ email: acct.email, folder, pages: 1, at: asked, tab: TAB_ID });
   const box = await until(() => { const b = store.get(boxKey(acct.email, folder), null); return b && b.at >= asked ? b : null; }, 20000, 300);
   if (!box) return { error: "its tab didn't answer (it may be in use)" };
   store.set(boxKey(acct.email, folder), null); // a one-off search: don't keep it
@@ -633,7 +672,8 @@ const listEmpty = (main) => !!$('[gh="tl"] .TC', main) && !$$("tr.zA", main).som
 function readThread(main) {
   const subjectEl = $("h2.hP", main);
   const me = accountEmail();
-  const items = $$('[role="listitem"]', main).filter((it) => it.closest('[role="list"]') && visible(it));
+  // (a message is one of Gmail's own list items: not one inside an email's words or its files)
+  const items = $$('[role="listitem"]', main).filter((it) => it.closest('[role="list"]') && visible(it) && !it.closest(".a3s, .aQH, .hq") && !(it.parentElement && it.parentElement.closest('[role="listitem"]')));
   const messages = items.map((item, i) => {
     const collapsed = item.getAttribute("aria-expanded") === "false";
     const g = $(".gD[email], .gD", item);
@@ -641,16 +681,7 @@ function readThread(main) {
     const name = g ? (g.getAttribute("name") || text(g)) : "";
     const dateEl = $(".g3[title], .g3", item);
     const body = $(".a3s", item);
-    const files = $$(".hq .aZo, .aQH .aZo", item).map((card) => {
-      const du = card.getAttribute("download_url") || "";
-      const parts = du.split(":");
-      const mime = parts[0] || "";
-      const nameF = text($(".aV3", card)) || (parts[1] ? decodeURIComponent(parts[1]) : "Attachment");
-      const thumb = $("img.aQG", card);
-      const src = thumb && thumb.src && !/^data:/.test(thumb.src) ? thumb.src : "";
-      // pictures show as themselves; documents (PDFs, Docs, Word…) by the first-page preview Gmail made
-      return { card, mime, name: nameF, url: parts.slice(2).join(":"), thumb: src && /^image\//.test(mime) ? src : "", preview: src && !/^image\//.test(mime) ? src : "" };
-    });
+    const files = $$(".hq .aZo, .aQH .aZo", item).map(readCard);
     const idEl = $("[data-message-id], [data-legacy-message-id]", item);
     // the sender's Google photo, kept for the lists
     const av = $(".aCi img.ajn, img.ajn", item);
@@ -682,6 +713,48 @@ function readThread(main) {
     labels: [...new Set($$(".ahR .hN, .hO .hN", main).map((x) => text(x)).filter((l) => l && !/^(inbox|important|unread)$/i.test(l)))].slice(0, 4),
     unsub: $$(".Ca", main).find((x) => /unsubscribe/i.test(text(x))) || null,
   };
+}
+
+/* One of Gmail's attachment cards: the file's name, kind, address and pictures. Gmail used to write the first three
+   into the card's download_url ("image/png:name.png:https://…"); now the card's own link has the address, its icon
+   says the kind, and its picture is the thumbnail. Both are read, the newer way first. */
+const MIMES = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", heic: "image/heic", heif: "image/heif", bmp: "image/bmp", svg: "image/svg+xml", tif: "image/tiff", tiff: "image/tiff",
+  pdf: "application/pdf", txt: "text/plain", csv: "text/csv", ics: "text/calendar", html: "text/html", htm: "text/html", json: "application/json",
+  mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", aac: "audio/aac", flac: "audio/flac", mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", zip: "application/zip" };
+const mimeOfName = (name) => MIMES[((String(name).match(/\.([a-z0-9]{1,5})$/i) || [])[1] || "").toLowerCase()] || "";
+function readCard(card) {
+  let mime = "", name = "", url = "";
+  // (the old way: the address is everything from "https:" on, so a name with a colon in it can't break it)
+  const du = card.getAttribute("download_url") || "";
+  const at = du.indexOf(":https://");
+  if (at > 0) {
+    url = du.slice(at + 1);
+    const head = du.slice(0, at), c = head.indexOf(":");
+    mime = c >= 0 ? head.slice(0, c) : "";
+    name = c >= 0 ? head.slice(c + 1) : head;
+    try { name = decodeURIComponent(name); } catch (e) { /* a name with a bare % in it: as it is */ }
+  }
+  name = text($(".aV3", card)) || name || "Attachment";
+  // the card's own link (Download, or the file itself): view=att with the file's attid
+  const link = $$("a[href]", card).map((a) => { try { return new URL(a.getAttribute("href"), location.href); } catch (e) { return null; } })
+    .find((u) => u && u.origin === location.origin && u.searchParams.get("view") === "att" && u.searchParams.has("attid"));
+  if (link) url = link.toString();
+  if (!mime) {
+    const icoEl = $("img.aSM", card);
+    const ico = icoEl ? icoEl.getAttribute("src") || "" : "";
+    const typed = /\/type\/([\w.+-]+\/[\w.+-]+)/.exec(ico);
+    mime = mimeOfName(name) || (typed && !/octet-stream/.test(typed[1]) ? typed[1] : "") || (/_image_/.test(ico) ? "image/*" : /_pdf_/.test(ico) ? "application/pdf" : /_video_/.test(ico) ? "video/*" : /_audio_/.test(ico) ? "audio/*" : "");
+  }
+  // its picture: the thumbnail Gmail drew (an empty src isn't one: it would read as this page's own address)
+  const pic = $("img.aQG", card);
+  const raw = pic ? pic.getAttribute("src") || "" : "";
+  let src = "";
+  if (raw && !/^data:/.test(raw)) { try { src = new URL(raw, location.href).toString(); } catch (e) { src = ""; } }
+  // pictures show as themselves; documents (PDFs, Docs, Word…) by the first-page preview Gmail made
+  const image = /^image\//.test(mime);
+  return { card, mime, name, url, thumb: src && image ? src : "", preview: src && !image ? src : "" };
 }
 
 /* Gmail's emoji reactions under a message: one chip per emoji, with a count */
@@ -721,6 +794,31 @@ function isRich(body) {
   const images = body.querySelectorAll("img[width], img[height]").length;
   return tables >= 3 || !!wide || (!!styledBg && tables >= 1) || images >= 3;
 }
+/* a designed email that's dark already (its own black or deep background): darkening would turn it light, so it's
+   shown as it is. Its background is the first one it paints over a good part of itself. */
+const NAMED_BG = { black: "0,0,0", white: "255,255,255", navy: "0,0,128", darkblue: "0,0,139", midnightblue: "25,25,112", darkslategray: "47,79,79", dimgray: "105,105,105", gray: "128,128,128" };
+function bgRgb(el) {
+  const raw = (el.getAttribute("bgcolor") || "").trim() || ((/background(?:-color)?\s*:\s*([^;!]+)/i.exec(el.getAttribute("style") || "") || [])[1] || "").trim();
+  if (!raw) return null;
+  const hex = /#([0-9a-f]{3}|[0-9a-f]{6})\b/i.exec(raw);
+  if (hex) { const x = hex[1].length === 3 ? hex[1].split("").map((c) => c + c).join("") : hex[1]; const n = parseInt(x, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(","); }
+  const rgb = /rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,/]+([\d.]+%?))?/i.exec(raw);
+  if (rgb) { const a = rgb[4] ? parseFloat(rgb[4]) / (/%$/.test(rgb[4]) ? 100 : 1) : 1; return a < 0.5 ? null : [rgb[1], rgb[2], rgb[3]].join(","); }
+  const name = /^[a-z]+/i.exec(raw);
+  return name && NAMED_BG[name[0].toLowerCase()] ? NAMED_BG[name[0].toLowerCase()] : null;
+}
+function darkAlready(node) {
+  let n = 0;
+  for (const el of node.querySelectorAll("[bgcolor], [style*='background' i]")) {
+    if (++n > 40) break;
+    const w = parseInt(el.getAttribute("width") || "", 10) || (/(?:^|;)\s*(?:max-)?width\s*:\s*(\d+)(px|%)/i.exec(el.getAttribute("style") || "") || [])[1] || 0;
+    const big = /^(TABLE|TBODY|CENTER|BODY)$/.test(el.tagName) || Number(w) >= 300 || /100%/.test((el.getAttribute("width") || "") + (el.getAttribute("style") || ""));
+    if (!big) continue;
+    const rgb = bgRgb(el);
+    if (rgb) return lumOf(rgb) < 0.12 ? rgb : "";
+  }
+  return "";
+}
 
 /* =================================================================== acting through Gmail */
 function gmailToolbar(act, titles) {
@@ -746,19 +844,27 @@ function shownPopup(e) {
 const popups = () => $$('[role="menu"], .J-M, [role="dialog"]:not(.Hd)').filter((e) => shownPopup(e) && !e.closest(".nH.Hd") && !e.classList.contains("qm-menu") && !e.closest("#qm-panel-scrim, #qm-pal-scrim, #qm-keys-scrim"));
 function placeUnder(pop, anchor) {
   const r = anchor.getBoundingClientRect();
-  const w = pop.offsetWidth, ht = pop.offsetHeight;
+  // (its size on screen: at Larger, Umbra's menus are zoomed, and their own pixels are bigger than the page's)
+  const pr = pop.getBoundingClientRect();
+  const w = pr.width || pop.offsetWidth, ht = pr.height || pop.offsetHeight;
   let top = r.bottom + 6;
   if (top + ht > window.innerHeight - 12) top = Math.max(12, r.top - ht - 6);
   const left = Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12));
-  pop.style.left = left + "px";
-  pop.style.top = top + "px";
-  pop.style.right = "auto";
-  pop.style.bottom = "auto";
-  // if something above it shifts where "left/top" start, correct by the difference
-  const got = pop.getBoundingClientRect();
-  if (Math.abs(got.left - left) > 1 || Math.abs(got.top - top) > 1) {
-    pop.style.left = left + (left - got.left) + "px";
-    pop.style.top = top + (top - got.top) + "px";
+  placeAt(pop, left, top);
+}
+/* put something at a spot on screen, whatever shifts or zooms what "left" and "top" mean for it */
+function placeAt(el, left, top) {
+  el.style.left = left + "px";
+  el.style.top = top + "px";
+  el.style.right = "auto";
+  el.style.bottom = "auto";
+  for (let i = 0; i < 3; i++) {
+    const got = el.getBoundingClientRect();
+    const dx = left - got.left, dy = top - got.top;
+    if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) break;
+    const k = got.width && el.offsetWidth ? got.width / el.offsetWidth : 1;
+    el.style.left = parseFloat(el.style.left) + dx / (k || 1) + "px";
+    el.style.top = parseFloat(el.style.top) + dy / (k || 1) + "px";
   }
 }
 /* keep one of Gmail's pop-ups under our button: Gmail places it next to its own (hidden) button,
@@ -784,6 +890,9 @@ async function openGmailPopup(open, anchor) {
       await wait(35);
       const fresh = popups().filter((e) => !before.has(e) && !e.dataset.qmSkip);
       if (fresh.length) { for (const f of fresh) pinUnder(f, anchor); gmailPop = { key: menuKey(anchor), els: fresh, closedAt: 0 }; return true; }
+      // (nothing yet, just after one of these was put away with Esc: Gmail's button took the press as closing the pop-up
+      // it had already put away. Pressed once more, it opens. Not otherwise: a slow first Labels would close again)
+      if (i === 7 && Date.now() - gmailPopShut < 10000 && !popups().some((e) => !before.has(e))) await open();
     }
     return false;
   } finally {
@@ -795,24 +904,55 @@ async function openGmailPopup(open, anchor) {
 async function gmailMenu(button) {
   if (!button) return null;
   const before = new Set(popups());
+  const was = document.activeElement;
   ROOT.classList.add("qm-hush");
   press(button);
   let menuEl = null;
   for (let i = 0; i < 12 && !menuEl; i++) { await wait(30); menuEl = popups().find((e) => !before.has(e)); }
   ROOT.classList.remove("qm-hush");
-  if (!menuEl) return null;
+  if (!menuEl) { giveKeysBack(was); return null; }
   menuEl.dataset.qmSkip = "1";
+  menuEl.qmWas = was;
   return menuEl;
 }
 function closeGmailMenu(menuEl, button) {
-  key("Escape", menuEl);
-  // (a closed menu can stay laid out, hidden: pressed again, it would open)
-  if (shownPopup(menuEl) && button) press(button);
+  // Esc where Gmail listens for it: its newer menus on the item that has the keyboard, its older ones on the menu
+  const a = document.activeElement;
+  if (a && menuEl.contains(a)) key("Escape", a);
+  else key("Escape", menuEl);
+  // (still open a moment later: pressed again, its button closes it; not at once, or it would open again as it goes)
+  setTimeout(() => {
+    if (shownPopup(menuEl)) { if (menuEl.contains(document.activeElement)) key("Escape", document.activeElement); else if (button) press(button); }
+    giveKeysBack(menuEl.qmWas);
+  }, 160);
+  giveKeysBack(menuEl.qmWas);
   unskip(menuEl);
+}
+/* after one of Gmail's menus was opened out of sight: the keyboard back where it was (Gmail hands it to its own
+   hidden button, or leaves it in the menu, where your keys would go to Gmail instead of Umbra) */
+function giveKeysBack(was) {
+  const a = document.activeElement;
+  if (!a || a === document.body) return;
+  if (a.closest('[id^="qm-"], .qm-menu, .nH.Hd[role="dialog"], .ip.qm-bar, .ip.qm-float, [role="alertdialog"]')) return; // (somewhere of yours)
+  if (was && was !== a && was !== document.body && was.isConnected && visible(was) && was.closest('[id^="qm-"], .qm-menu, .nH.Hd[role="dialog"], .ip')) was.focus({ preventScroll: true });
+  else a.blur();
 }
 // a menu Umbra opened out of sight is seen again once it's done with (the next time it opens, it's Gmail's to show)
 const unskip = (menuEl) => setTimeout(() => { if (menuEl) delete menuEl.dataset.qmSkip; }, 700);
 const itemLabel = (it) => text(it).replace(/[►▸›]\s*$/, "").trim();
+/* Gmail's items for one of its menus, at once: what that menu had the last time (kept on this computer, so after a
+   reload too), read again out of sight; `later` has what it has now. Umbra's menu never waits for Gmail's to open
+   and close: it opens with what it knows, and takes in what's changed a moment later. */
+const gmailMenuMemo = new Map(Object.entries(store.get("gmail-menus", {}) || {}));
+function gmailMenuSoon(button, key) {
+  const had = button ? gmailMenuMemo.get(key) || [] : [];
+  const later = button ? gmailMenuItems(button).then((items) => {
+    if (items.length && !sameList(items, gmailMenuMemo.get(key))) { gmailMenuMemo.set(key, items); store.set("gmail-menus", Object.fromEntries(gmailMenuMemo)); }
+    return items;
+  }) : Promise.resolve([]);
+  return { now: had, later };
+}
+const sameList = (a, b) => (a || []).join("\n") === (b || []).join("\n");
 async function gmailMenuItems(button) {
   const m = await gmailMenu(button);
   if (!m) return [];
@@ -847,6 +987,8 @@ async function pressGmailMenuItem(button, label, anchor, popup = true) {
 let menu = null;
 let lastClosed = { key: "", at: 0 };
 let gmailPop = null;
+let gmailPopShut = 0; // when one of Gmail's pop-ups (Snooze, Move to) that Umbra opened was last put away with Esc
+window.addEventListener("keydown", (e) => { if (e.isTrusted && e.key === "Escape" && gmailPop && gmailPop.els.some(visible)) gmailPopShut = Date.now(); }, true);
 const menuKey = (a) => { const r = a.getBoundingClientRect(); return (a.getAttribute("aria-label") || text(a)) + "@" + Math.round(r.left / 8) + "," + Math.round(r.top / 8); };
 function closeMenu() {
   if (!menu) return;
@@ -867,25 +1009,42 @@ function wasOpen(anchor) {
   if (lastClosed.key === k && now - lastClosed.at < 400) return true;
   if (gmailPop && gmailPop.key === k) {
     const open = gmailPop.els.filter(visible);
-    if (open.length) { key("Escape", open[0]); gmailPop = null; return true; }
+    if (open.length) { key("Escape", open[0]); gmailPop = null; gmailPopShut = Date.now(); return true; }
     if (now - gmailPop.closedAt < 400) { gmailPop = null; return true; }
   }
   return false;
 }
 const menuButton = (name, label, fn, extra) => { const b = ib(name, label, () => { if (!wasOpen(b)) fn(b); }, extra); b.setAttribute("aria-haspopup", "menu"); return b; };
+function fillMenu(el, items) {
+  const kids = [];
+  for (const it of items) {
+    if (!it) continue;
+    if (it === "-") { if (kids.length && kids[kids.length - 1].getAttribute("role") !== "separator") kids.push(h("div", { role: "separator" })); continue; }
+    const b = h("button", { type: "button", role: "menuitem", tabindex: "-1" }, h("span", { text: it.label }), it.k ? h("span", { class: "qm-k", text: it.k }) : null);
+    // (chosen: the menu's button opens it again at once, not taken for the click that closed it)
+    b.addEventListener("click", () => { closeMenu(); lastClosed = { key: "", at: 0 }; it.run(); });
+    kids.push(b);
+  }
+  while (kids.length && kids[kids.length - 1].getAttribute("role") === "separator") kids.pop();
+  el.replaceChildren(...kids);
+}
+/* the open menu with what it should now hold (Gmail's own items, read a moment after it opened): in place, no motion,
+   the keyboard where it was */
+function refillMenu(el, items) {
+  if (!menu || menu.el !== el) return;
+  const all = $$('[role="menuitem"]', el), at = all.indexOf(document.activeElement);
+  const label = at >= 0 ? text(all[at]) : "";
+  fillMenu(el, items);
+  if (at >= 0) { const now = $$('[role="menuitem"]', el); (now.find((b) => text(b) === label) || now[Math.min(at, now.length - 1)] || el).focus({ preventScroll: true }); }
+  placeUnder(el, menu.anchor);
+}
 function openMenu(anchor, items) {
   const k = menuKey(anchor);
-  if (menu && menu.key === k) { closeMenu(); return; }
+  if (menu && menu.key === k) { closeMenu(); return null; }
   closeMenu();
-  if (!items.length) return;
+  if (!items.filter((x) => x && x !== "-").length) return null;
   const el = h("div", { class: "qm-menu", role: "menu" });
-  for (const it of items) {
-    if (it === "-") { if (el.lastChild && el.lastChild.getAttribute("role") !== "separator") el.appendChild(h("div", { role: "separator" })); continue; }
-    const b = h("button", { type: "button", role: "menuitem", tabindex: "-1" }, h("span", { text: it.label }), it.k ? h("span", { class: "qm-k", text: it.k }) : null);
-    b.addEventListener("click", () => { closeMenu(); it.run(); });
-    el.appendChild(b);
-  }
-  if (el.lastChild && el.lastChild.getAttribute("role") === "separator") el.lastChild.remove();
+  fillMenu(el, items);
   el.addEventListener("keydown", (e) => {
     const all = $$('[role="menuitem"]', el);
     const i = all.indexOf(document.activeElement);
@@ -902,18 +1061,34 @@ function openMenu(anchor, items) {
     const left = right ? sr.right + 8 : sr.left - 8 - mr.width;
     const top = Math.max(8, Math.min(ar.top - 6, window.innerHeight - 8 - mr.height));
     el.classList.add("qm-menu-side");
-    Object.assign(el.style, { left: Math.round(left) + "px", top: Math.round(top) + "px", right: "auto", bottom: "auto" });
+    placeAt(el, Math.round(left), Math.round(top));
   }
   const r = anchor.getBoundingClientRect();
-  el.style.transformOrigin = (parseFloat(el.style.top) < r.top ? "bottom " : "top ") + (r.left + r.width / 2 > window.innerWidth / 2 ? "right" : "left");
+  const above = el.getBoundingClientRect().top < r.top;
+  el.style.transformOrigin = (above ? "bottom " : "top ") + (r.left + r.width / 2 > window.innerWidth / 2 ? "right" : "left");
+  el.style.setProperty("--qm-from-y", above ? "4px" : "-4px");
   anchor.setAttribute("aria-expanded", "true");
   menu = { el, anchor, key: k };
   const holder = anchor.closest(".qm-msg");
   if (holder) holder.classList.add("qm-on");
   const first = $('[role="menuitem"]', el);
   if (first) first.focus({ preventScroll: true });
+  // (Gmail, putting away a menu of its own Umbra read out of sight, takes the keyboard back a moment later: it comes
+  // straight back here, unless you've done something since)
+  const openedAt = Date.now();
+  el.addEventListener("focusout", (e) => {
+    const was = e.target;
+    setTimeout(() => {
+      if (Date.now() - openedAt > 1200 || lastInput > openedAt || !menu || menu.el !== el || el.contains(document.activeElement)) return;
+      if (was.isConnected) was.focus({ preventScroll: true });
+    }, 0);
+  });
+  return el;
 }
 window.addEventListener("mousedown", (e) => {
+  // (a click of yours: not one of Umbra's own presses on Gmail's buttons, out of sight, such as reading the open menu's
+  // Gmail items while it's open)
+  if (!e.isTrusted) return;
   if (menu && !menu.el.contains(e.target) && !menu.anchor.contains(e.target)) closeMenu();
   if (gmailPop && !gmailPop.closedAt && gmailPop.els.some(visible) && !gmailPop.els.some((p) => p.contains(e.target))) gmailPop.closedAt = performance.now();
 }, true);
@@ -1043,11 +1218,12 @@ const boxKey = (email, folder) => "box2:" + email + "|" + folder;
 let nav = { at: 0, title: "" };
 window.addEventListener("hashchange", (e) => {
   const from = baseHash((e.oldURL.split("#")[1] || "").split("?")[0]), to = baseHash((e.newURL.split("#")[1] || "").split("?")[0]);
-  if (from !== to && !isThreadHash("#" + to) && !isThreadHash("#" + from)) nav = { at: Date.now(), title: gmailTitle() };
+  if (from !== to && !isThreadHash("#" + to) && !isThreadHash("#" + from)) { const m = gmailMain(); nav = { at: Date.now(), title: gmailTitle(), sig: m ? rowsSig(m) : "" }; }
   // into a search from anywhere (a pinned search, a sender's "All mail from", Back): Esc returns there
-  if (/^search\//.test(to) && from && !/^search\//.test(from)) findReturn = "#" + (e.oldURL.split("#")[1] || "");
+  if (/^search\//.test(to) && from && (!/^search\//.test(from) || "#" + from === DONE_HASH) && !aiPeeking && !peeking && !ghost) findReturn = "#" + (e.oldURL.split("#")[1] || "");
 }, true);
-const listSettled = () => !nav.at || gmailTitle() !== nav.title || Date.now() - nav.at > 2500;
+// (or its rows aren't the ones it had: going from one search to another, Gmail's title stays "Search results")
+const listSettled = () => { if (!nav.at || gmailTitle() !== nav.title || Date.now() - nav.at > 2500) return true; const m = gmailMain(); return !!nav.sig && !!m && rowsSig(m) !== nav.sig; };
 /* Gmail's list on this page, if it is showing that folder */
 function mainList(folder) {
   const m = gmailMain();
@@ -1088,6 +1264,16 @@ const readHere = new Map(Object.entries(store.get("read-here", {}))); // thread 
 let readSaveT = 0;
 const saveReadSoon = () => { clearTimeout(readSaveT); readSaveT = setTimeout(() => store.set("read-here", Object.fromEntries([...readHere].slice(-300))), 600); };
 function noteRead(id, time) { readHere.set(String(id), { at: Date.now(), time: time || Date.now() }); saveReadSoon(); }
+// (marked unread from inside it: it stays unread, though it's still on screen, until you open it again)
+const markedUnread = new Set();
+function markUnreadHere(id) {
+  if (!id) return;
+  id = String(id);
+  markedUnread.add(id);
+  forgetRead(id);
+  for (const s of sources.values()) { const r = s.rows.get(id); if (r) r.unread = true; }
+  everyKeys = ["!redraw"];
+}
 function forgetRead(id) { if (readHere.delete(String(id))) saveReadSoon(); }
 function readFix(r) {
   const o = r && readHere.get(String(r.id));
@@ -1145,25 +1331,43 @@ function publish(folder, rows, page, done) {
   if (rows.length) {
     // rows that used to fall inside this stretch of time but aren't there now have left the folder
     const hi = rows[0].time, lo = rows[rows.length - 1].time, ids = new Set(rows.map((r) => r.id));
-    for (const [id, r] of map) if ((r.time <= hi && r.time >= lo && !ids.has(id)) || (page === 1 && r.time > hi)) map.delete(id);
+    for (const [id, r] of map) if (!ids.has(id) && ((r.time < hi && r.time > lo) || (page === 1 && r.time >= hi) || (done && r.time < lo))) map.delete(id);
   }
   for (const r of rows) map.set(r.id, { id: r.id, from: r.from, people: r.people, count: r.count, draft: r.draft, subject: r.subject, snippet: (r.snippet || "").slice(0, 140), when: r.when, whenFull: r.whenFull, unread: r.unread, important: r.important, starred: r.starred, attach: r.attach, files: r.files, time: r.time });
   const all = [...map.values()].sort((a, b) => b.time - a.time).slice(0, 800);
   const pages = Math.max(page, fresh ? box.pages || 0 : 0);
-  const sig = hashString(pages + ":" + !!done + ":" + all.map((r) => r.id + (r.unread ? 1 : 0) + r.when).join(","));
+  const sig = hashString(pages + ":" + !!done + ":" + all.map((r) => r.id + (r.unread ? 1 : 0) + (r.starred ? "s" : "") + (r.draft || "") + (r.count || "") + r.when).join(","));
   if (box && box.sig === sig && Date.now() - box.at < 60000) return;
   store.set(k, { at: Date.now(), rows: all, pages, done: !!done, sig, tab: TAB_ID });
+  keepBoxes(email, folder);
+}
+function keepBoxes(email, folder) {
+  const ik = "boxes:" + email, idx = store.get(ik, {}) || {};
+  if (idx[folder] && Date.now() - idx[folder] < 3600000) return;
+  idx[folder] = Date.now();
+  const extra = Object.entries(idx).filter(([f]) => f !== "#inbox" && f !== "#drafts").sort((a, b) => b[1] - a[1]);
+  for (const [f] of extra.slice(12)) { delete idx[f]; store.del(boxKey(email, f)); }
+  store.set(ik, idx);
 }
 function heartbeat() {
+  if (!enabled) return;
   const e = accountEmail();
   if (e) store.set("live:" + e, { at: Date.now(), tab: TAB_ID, hidden: document.hidden });
 }
 const liveTab = (email) => { const l = store.get("live:" + email, null); return l && l.tab !== TAB_ID && Date.now() - l.at < 75000 ? l : null; };
-/* another tab asks this one (in the background) for more of a folder */
+/* another tab asks this one (in the background) for more of a folder: a list of asks, one per account */
+function askTab(req) {
+  const q = store.get("want", null);
+  const list = (Array.isArray(q) ? q : q ? [q] : []).filter((x) => x && Date.now() - x.at < 20000 && !(x.email === req.email && x.tab === req.tab));
+  list.push(req);
+  store.set("want", list.slice(-12));
+}
 let serving = false, restoreTo = "";
-async function serve(req) {
+async function serve(reqs) {
   const me = accountEmail();
-  if (!req || serving || !me || req.email !== me || req.tab === TAB_ID || Date.now() - req.at > 20000) return;
+  const list = Array.isArray(reqs) ? reqs : reqs ? [reqs] : [];
+  const req = list.filter((x) => x && x.email === me && x.tab !== TAB_ID).sort((a, b) => b.at - a.at)[0];
+  if (!enabled || !req || serving || !me || req.email !== me || req.tab === TAB_ID || Date.now() - req.at > 20000) return;
   if (!document.hidden || ROOT.classList.contains("qm-writing") || document.getElementById("qm-panel-scrim")) return;
   const lock = store.get("serving:" + me, null);
   if (lock && lock.tab !== TAB_ID && Date.now() - lock.at < 20000) return;
@@ -1199,6 +1403,7 @@ const boxWatch = [];
 let streamKey = "";
 const streamScroll = new Map();
 const gone = new Map(); // rows just archived or deleted here: hidden until Gmail agrees
+const rowsLeaving = new Map(); // id -> { r, at }: a row on its way out, kept in its place until it has gone
 function ensureSources(folder, all) {
   const k = folder + "|" + (all ? "all" : accountEmail());
   if (streamKey !== k) { dropSources(); streamKey = k; everyFolder = folder; }
@@ -1265,10 +1470,10 @@ function absorbMain(src) {
   const page = listPage(m);
   let changed = false;
   if (rows.length) {
-    const hi = rows[0].time, lo = rows[rows.length - 1].time, ids = new Set(rows.map((r) => r.id));
+    const hi = rows[0].time, lo = rows[rows.length - 1].time, ids = new Set(rows.map((r) => r.id)), last = isOff(olderOf(m));
     for (const [id, r] of src.rows) {
       if (ids.has(id) || r.feed) continue;
-      if ((r.time < hi && r.time > lo) || (page === 1 && r.time > hi)) { src.rows.delete(id); changed = true; }
+      if ((r.time < hi && r.time > lo) || (page === 1 && r.time >= hi) || (last && r.time < lo)) { src.rows.delete(id); changed = true; }
     }
   } else if (page === 1 && listEmpty(m) && src.rows.size) { src.rows.clear(); changed = true; }
   for (const r of rows) {
@@ -1330,10 +1535,11 @@ async function askMore(src) {
   src.done = false;
   invalidate(true);
   const want = (src.pages || 0) + 1, folder = everyFolder;
-  store.set("want", { email: src.account.email, folder, pages: want, at: Date.now(), tab: TAB_ID });
+  askTab({ email: src.account.email, folder, pages: want, at: Date.now(), tab: TAB_ID });
   const ok = await until(() => { const b = store.get(boxKey(src.account.email, folder), null); return b && Date.now() - b.at < 30000 && (b.pages >= want || b.done); }, 20000, 600);
   if (sources.get(src.account.email) !== src) return;
   src.busy = false;
+  src.retrying = false;
   src.stalled = ok ? 0 : Date.now(); // its tab is in front, asleep or busy: show what's there for now
   loadBox(src);
   invalidate(true);
@@ -1362,7 +1568,7 @@ function pageBackSoon(folder) {
   clearTimeout(pageBackT);
   pageBackT = setTimeout(() => {
     const m = mainList(folder);
-    if (!m || baseHash(hashNow()) !== folder || listPage(m) <= 1) return;
+    if (!enabled || !m || baseHash(hashNow()) !== folder || listPage(m) <= 1) return;
     if ([...sources.values()].some((x) => x.busy) || ghost || peeking || aiPeeking || writingAnything() || Date.now() - lastInput < 3000) { pageBackSoon(folder); return; }
     firstPage(folder);
   }, 6000);
@@ -1387,7 +1593,7 @@ function setFilter(id, on) {
   filterReach = FILTER_STEP;
   cursor = -1;
   everyKeys = ["!redraw"];
-  const sc = $("#qm-view .qm-scroll");
+  const sc = $("#qm-view .qm-scroll:not(.qm-leaving *)");
   if (sc && screen.kind === "stream") sc.scrollTop = 0;
   if (screen.kind !== "stream" && screen.kind !== "") goBack(); // from a conversation: back to its list
   invalidate(true);
@@ -1403,7 +1609,7 @@ function streamRows(noPiles) {
   for (const s of sources.values()) {
     if (!s.ready) continue;
     for (const r of s.rows.values()) if (!gone.has(r.id)) all.push(readFix(r));
-    if (sources.size > 1 && !s.done && s.rows.size) cutoff = Math.max(cutoff, s.oldest);
+    if (sources.size > 1 && !s.done && !s.retrying && s.rows.size) cutoff = Math.max(cutoff, s.oldest);
   }
   all.sort((a, b) => b.time - a.time);
   const on = activeFilters().filter((f) => !noPiles || !f.id.startsWith("cat:"));
@@ -1420,7 +1626,8 @@ function everythingMore(further) {
   for (const s of sources.values()) {
     // "the end" read while Gmail was mid-draw: its Older button says otherwise, so carry on
     if (s.kind === "main" && s.done && s.ready && !s.busy) { const b = olderOf(mainList(everyFolder)); if (b && !isOff(b)) s.done = false; }
-    if (s.stalled && Date.now() - s.stalled > 30000 && liveTab(s.account.email)) { s.stalled = 0; s.done = false; }
+    // (asked again after a while: what's there stays in the list meanwhile, rather than its bottom going and coming back)
+    if (s.stalled && Date.now() - s.stalled > 30000 && liveTab(s.account.email)) { s.stalled = 0; s.done = false; s.retrying = true; }
     if (s.ready && !s.done && (!pick || s.oldest > pick.oldest)) pick = s;
   }
   if (!pick || pick.busy) return;
@@ -1434,9 +1641,9 @@ function liveRow(id) {
   return row && visible(row) ? row : null;
 }
 /* Gmail's address for a conversation: "thread-f:" and its number (the short hex id only opens old ones) */
-function threadHash(folder, id) {
+function threadHash(folder, id, email) {
   folder = folder || "#inbox"; // opened straight onto a conversation: no list yet, so the inbox
-  const perm = permIds.get(accountEmail() + ":" + id);
+  const perm = permIds.get((email || accountEmail()) + ":" + id);
   if (perm) return folder + "/" + perm;
   try { return folder + "/thread-f:" + BigInt("0x" + id).toString(); } catch (e) { return folder + "/" + id; }
 }
@@ -1452,9 +1659,15 @@ function notePerm(id, perm) {
   permIds.set(k, perm);
   while (permIds.size > 3000) permIds.delete(permIds.keys().next().value);
   clearTimeout(permSaveT);
-  permSaveT = setTimeout(() => store.set("perm-ids", Object.fromEntries(permIds)), 2000);
+  permSaveT = setTimeout(() => {
+    const all = Object.assign({}, store.get("perm-ids", {}) || {}, Object.fromEntries(permIds));
+    const keys = Object.keys(all);
+    for (const k of keys.slice(0, Math.max(0, keys.length - 3000))) delete all[k];
+    store.set("perm-ids", all);
+  }, 2000);
 }
 let opening = null; // the conversation just clicked, shown at once while Gmail loads it
+let cursorBack = "";
 function openStreamRow(r, e) {
   if (!r) return;
   const live = r.account && r.account.index === accountIndex() ? liveRow(r.id) : null;
@@ -1464,21 +1677,26 @@ function openStreamRow(r, e) {
   // a draft on its own (in Drafts): Gmail opens it in a window, which grows out of its row
   if (everyFolder === "#drafts" && !r.count && live) { openDraftRow(r, live, e && e.target && e.target.closest ? e.target.closest(".qm-row") : null); return; }
   r.unread = false;
+  markedUnread.delete(String(r.id));
   noteRead(r.id, r.time);
   if (r.account && r.account.index !== accountIndex()) { openElsewhere(r); return; } // Everything stays on there
   noteHero(r);
+  cursorBack = String(r.id); // (back in the list, the cursor is on it: j and k, e and # carry on from there)
   opening = { id: r.id, subject: r.subject, from: whoText(r), single: !r.count, at: Date.now() };
   invalidate(true);
   // Gmail's own row when it's on the page (always works, and is quickest); its address otherwise
-  if (live) { press($(".xS", live) || live); return; }
+  if (live && !looking()) { press($(".xS", live) || live); return; }
   const folder = paneSearch() || everyFolder || "#inbox";
   go(threadHash(folder, r.id));
-  setTimeout(() => {
+  const fallback = (late) => {
+    if (looking() || waitingGo) { setTimeout(() => fallback(late), 500); return; } // (it isn't on its way yet)
     // not opened (a conversation Gmail hasn't numbered yet): find its row on Gmail's list and press that
-    if (route().kind === "thread" || !opening || opening.id !== r.id) return;
+    if ((route().kind === "thread" && openThreadId() === String(r.id)) || !opening || opening.id !== r.id) return;
+    if (!late && route().kind === "loading") { setTimeout(() => fallback(true), 3500); return; } // (Gmail is still at it)
     location.replace(folder);
     until(() => liveRow(r.id), 4000, 80).then((row) => { if (row) press($(".xS", row) || row); else { opening = null; invalidate(true); toast("Couldn't open that conversation."); } });
-  }, 2500);
+  };
+  setTimeout(() => fallback(false), 2500);
 }
 async function openDraftRow(r, live, rowEl) {
   const before = new Set($$('.nH.Hd[role="dialog"]').filter(visible));
@@ -1685,10 +1903,11 @@ function savePeopleSoon() {
   peopleDirty = setTimeout(() => {
     peopleDirty = 0;
     store.set("photos", Object.fromEntries([...photos].slice(-400)));
-    store.set("seen", Object.fromEntries([...seen].sort((a, b) => b[1].at - a[1].at).slice(0, 400)));
+    const all = [...seen].sort((a, b) => b[1].at - a[1].at);
+    store.set("seen", Object.fromEntries([...all.filter(([, p]) => p.wrote).slice(0, 2000), ...all.filter(([, p]) => !p.wrote).slice(0, 400)]));
   }, 4000);
 }
-function saveContacts() { store.set("contacts", contacts); invalidate(true); }
+function saveContacts() { store.set("contacts", contacts); lastThreadSig = ""; invalidate(true); }
 const isAutomated = (email) => !!email && (AUTOMATED.test(email) || (ROLE.test(email) && !PERSONAL.test(email)));
 function notePerson(email, name, wrote) {
   if (!email || isAutomated(email) || email === accountEmail()) return;
@@ -1761,6 +1980,13 @@ function buildSide() {
     h("div", { class: "qm-group qm-foot" },
       sideItem("button", { type: "button", onclick: () => { closeSide(); openFind(); } }, icon("find"), "Find", h("kbd", { "data-qmkey": "find" })),
       sideItem("button", { type: "button", onclick: () => { closeSide(); openPanel(); } }, icon("settings"), "Settings")));
+  side.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const all = $$("a[href], button", side).filter(visible);
+    const i = all.indexOf(document.activeElement);
+    const n = all[(i + (e.key === "ArrowDown" ? 1 : all.length - 1) + (i < 0 && e.key === "ArrowUp" ? 1 : 0)) % all.length];
+    if (n) { e.preventDefault(); e.stopPropagation(); n.focus({ preventScroll: true }); }
+  });
   const burger = h("button", { id: "qm-burger", type: "button", "aria-label": "Menu", "data-qmtip": "Menu|menu", "aria-expanded": "false", onclick: () => toggleSide() }, icon("menu"));
   document.body.append(burger, scrim, side);
   keyHints();
@@ -1770,8 +1996,12 @@ function buildSide() {
 function renderAccounts() {
   const box = document.getElementById("qm-accts");
   if (!box) return;
-  box.replaceChildren();
+  // (drawn again only when something in it changed: accounts, names, colours, counts, the folder they open)
+  const sig = accounts.map((a) => a.email + "|" + accountLabel(a.email) + "|" + acctColor(a.email) + "|" + acctCount(a)).join(",") + "|" + accountIndex() + "|" + everything + "|" + currentFolder();
   applyColors();
+  if (box.dataset.sig === sig && (accounts.length < 2 || box.firstChild)) { markAccount(); return; }
+  box.dataset.sig = sig;
+  box.replaceChildren();
   const sep = box.nextElementSibling && box.nextElementSibling.classList.contains("qm-sep") ? box.nextElementSibling : null;
   if (accounts.length < 2) { if (sep) sep.remove(); return; }
   const cur = accountIndex();
@@ -1783,7 +2013,7 @@ function renderAccounts() {
     sw.style.background = acctColor(a.email);
     const n = acctCount(a);
     const link = sideItem("a", { class: "qm-acct", href: `/mail/u/${a.index}/${currentFolder()}`, title: a.email, "data-acct": String(a.index) }, sw, dup ? a.email.split("@")[0] : labels[i], n ? h("span", { class: "qm-n", text: n, title: countNote(n) }) : null);
-    link.addEventListener("click", (e) => { e.preventDefault(); closeSide(); switchAccount(a); });
+    link.addEventListener("click", (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); closeSide(); switchAccount(a); });
     box.appendChild(link);
   });
   markAccount();
@@ -1802,14 +2032,14 @@ function newToday(email) {
   return rows.filter((r) => r.unread && r.time >= t0).length;
 }
 function acctCount(a) {
-  if (prefs.counts === "off") return "";
+  if (prefs.counts === "off" || cp().title) return ""; // (no unread counts: Settings › Calm)
   if (prefs.counts === "unread") return a.index === accountIndex() ? gmailCount("#inbox") : a.unread ? Number(a.unread).toLocaleString() : "";
   const n = newToday(a.email);
   return n ? String(n) : "";
 }
 const countNote = (n) => (prefs.counts === "unread" ? n + " unread" : n + " new today");
 function folderCount(hash) {
-  if (prefs.counts === "off") return "";
+  if (prefs.counts === "off" || cp().title) return "";
   if (prefs.counts === "unread") return /^#(inbox|drafts|category\/|snoozed|scheduled)/.test(hash) ? gmailCount(hash) : "";
   if (hash !== "#inbox") return "";
   const n = newToday(accountEmail());
@@ -1846,8 +2076,8 @@ function renderFolders() {
   const sig = links.map((f) => f[1]).join() + "|" + counts.join();
   if (box.dataset.sig !== sig) {
     box.dataset.sig = sig;
-    box.replaceChildren(...links.map(([label, hash, ico, sub, run], i) => sideItem("a", { href: hash, "data-hash": run ? "" : hash, "data-run": run ? label : null, class: sub ? "qm-sub" : null, onclick: (e) => { if (!run && (e.metaKey || e.ctrlKey || e.shiftKey || e.button)) return; e.preventDefault(); closeSide(); if (run) run(); else go(hash); } }, icon(ico), label,
-      [run ? null : counts[i] ? h("span", { class: "qm-n", text: counts[i], title: countNote(counts[i]) }) : null, i < 9 ? h("span", { class: "qm-kn", "aria-hidden": "true", text: MOD_KEY + (i + 1) }) : null])),
+    box.replaceChildren(...links.map(([label, hash, ico, sub, run], i) => sideItem("a", { href: hash, "data-hash": run ? "" : hash, "data-run": run ? label : null, class: sub ? "qm-sub" : null, onclick: (e) => { if (!run && (e.metaKey || e.ctrlKey || e.shiftKey || e.button)) return; e.preventDefault(); closeSide(); if (run) run(); else { if (paperOn && hash === "#inbox") closePaper(); go(hash); } } }, icon(ico), label,
+      [run ? null : counts[i] ? h("span", { class: "qm-n", text: counts[i], title: countNote(counts[i]) }) : null, i < 9 && !TABS_KEEP_NUMBERS ? h("span", { class: "qm-kn", "aria-hidden": "true", text: MOD_KEY + (i + 1) }) : null])),
       sideItem("button", { type: "button", "aria-haspopup": "menu", "aria-label": "Labels", onclick: (e) => { if (!wasOpen(e.currentTarget)) openLabels(e.currentTarget); } }, icon("labels"), "Labels"));
   }
   const hash = hashNow();
@@ -1877,7 +2107,7 @@ function renderChip() {
   sw.style.background = all ? "" : acctColor(accountEmail());
   if ($("span", chip).textContent !== label) $("span", chip).textContent = label;
   chip.classList.toggle("qm-chip-dot", prefs.chip === "color");
-  chip.title = (prefs.chip === "color" ? label + " · " : "") + "Switch account (⌘K)";
+  chip.title = (prefs.chip === "color" ? label + " · " : "") + "Switch account" + (keyLabel(keyFor("palette")) ? " (" + keyLabel(keyFor("palette")) + ")" : "");
   renderRail();
 }
 /* the quick buttons under the menu button: which, and in what order, is yours (Settings › Layout) */
@@ -1896,7 +2126,7 @@ function renderRail() {
   const multi = accounts.length > 1;
   const cur = everything && multi ? "all" : String(accountIndex());
   const here = baseHash(hashNow());
-  const sig = [cur, multi, accounts.map((a) => a.email + acctColor(a.email)).join(), prefs.side, prefs.rail, railList().join(), here, lightWanted(), hasTodos(), JSON.stringify(prefs.keys), aiOn(), [...piles].map(([cat, c]) => cat + pileBadge(c)).join(), pileOn()].join("|");
+  const sig = [cur, multi, accounts.map((a) => a.email + acctColor(a.email)).join(), prefs.side, prefs.rail, railList().join(), here, screen.kind, lightWanted(), hasTodos(), JSON.stringify(prefs.keys), aiOn(), [...piles].map(([cat, c]) => cat + pileBadge(c)).join(), pileOn()].join("|");
   if (rail && rail.dataset.sig === sig) return;
   if (!rail) { rail = h("nav", { id: "qm-rail", "aria-label": "Quick" }); document.body.appendChild(rail); }
   rail.dataset.sig = sig;
@@ -1939,13 +2169,14 @@ function renderRail() {
   keyHints();
 }
 function toggleSide() { if (ROOT.classList.contains("qm-side-open")) closeSide(); else openSide(); }
-function openSide() {
+function openSide(byKey) {
   if (!enabled || document.getElementById("qm-panel-scrim")) return;
   closeMenu();
   renderFolders();
   ROOT.classList.add("qm-side-open");
   const b = document.getElementById("qm-burger");
   if (b) b.setAttribute("aria-expanded", "true");
+  if (byKey) setTimeout(() => { const cur = $('#qm-side [aria-current="page"], #qm-side [aria-current="true"]') || $("#qm-side a, #qm-side button"); if (cur) cur.focus({ preventScroll: true }); }, 0);
 }
 /* the menu slides out when the pointer reaches the screen edge (if you turn that on), and back in when
    it leaves the menu; it never opens while you're dragging, selecting, or in a dialog */
@@ -1992,7 +2223,10 @@ function openLabels(anchor) {
   }
   items.sort((a, b) => a.label.localeCompare(b.label));
   openMenu(anchor, [...items, "-",
+    { label: "Important", run: () => { closeSide(); go("#imp"); } },
     { label: "Scheduled", run: () => { closeSide(); go("#scheduled"); } },
+    { label: "Chats", run: () => { closeSide(); go("#chats"); } },
+    ...($$(".aKh [role=tab]").some((t) => /forums/i.test(text(t))) ? [{ label: "Forums", run: () => { closeSide(); go("#category/forums"); } }] : []),
     { label: "Spam", run: () => { closeSide(); go("#spam"); } },
     { label: "Trash", run: () => { closeSide(); go("#trash"); } }, "-",
     { label: "Manage labels", run: () => { closeSide(); go("#settings/labels"); } }]);
@@ -2071,8 +2305,11 @@ function setScreen(kind, key, build) {
   const el = build();
   el.classList.add("qm-screen");
   if (screen.kind === "opening") el.classList.add("qm-instant"); // the conversation was already drawn
-  host.replaceChildren(el);
-  const prevKind = screen.kind;
+  // (the screen going had Gmail's editor over its reply box: it goes with it, and the next screen's box takes it again)
+  const oc = composerOf();
+  if (oc && oc.ip) detachBar(oc);
+  const prevKind = screen.kind, prevEl = screen.el && screen.el.parentElement === host ? screen.el : null;
+  screenAway(prevEl, el, screenHowOf(prevKind, kind));
   screen = { kind, key, el, at: Date.now() };
   screenIn(el, prevKind, kind);
   closeFileView(); // (a file open over the screen that's gone)
@@ -2187,6 +2424,13 @@ function renderStream(r, all) {
     fillBrief(brief, multi ? everyBriefLines() : own);
   } else brief.replaceChildren();
   const list = streamRows();
+  // (a row on its way out stays where it was until it has gone: redrawn meanwhile, the list doesn't cut it short)
+  for (const [id, x] of rowsLeaving) {
+    if (Date.now() - x.at > 700) { rowsLeaving.delete(id); continue; }
+    if (list.some((r) => r.id === id)) continue;
+    const at = everyList.findIndex((r) => r.id === id);
+    if (at >= 0) list.splice(Math.min(at, list.length), 0, x.r);
+  }
   renderCalm(el, list, folder);
   binNote(el, folder, list.length);
   // newest first, under quiet day headings (Today, Yesterday, Monday, …)
@@ -2217,20 +2461,27 @@ function renderStream(r, all) {
   // a pile looks back only as far as Gemini has read: older mail has no notes to match
   const reachedBack = [...sources.values()].reduce((a, s) => Math.min(a, s.oldest), Infinity);
   pileStop = on.length > 0 && on.some((f) => f.id.startsWith("cat:")) && gem.oldest < Infinity && reachedBack < gem.oldest - 86400000;
-  const more = !pileStop && (!sources.size || [...sources.values()].some((s) => !s.ready || !s.done || s.busy));
+  const more = !pileStop && !calmEnded() && (!sources.size || [...sources.values()].some((s) => !s.ready || !s.done || s.busy));
   const loaded = loadedRows();
   const capped = on.length > 0 && more && ![...sources.values()].some((s) => s.busy || !s.ready) && loaded >= filterReach;
   // the filter bar: stays in sight above the list while anything is filtered out
   const fslot = $(".qm-filterslot", el);
-  const fsig = on.map((f) => f.id).join() + "|" + list.length + (more && !capped ? "+" : "");
+  const fsig = on.map((f) => f.id).join();
+  const fcount = list.length.toLocaleString() + (more && !capped ? "+" : "") + " shown";
   if (fslot.dataset.sig !== fsig) {
     fslot.dataset.sig = fsig;
-    fslot.replaceChildren(...(on.length ? [h("div", { class: "qm-filterbar", role: "status", "aria-label": "Filters on" },
-      icon("filter"), h("span", { class: "qm-flabel", text: "Only" }),
-      ...on.map((f) => h("button", { type: "button", class: "qm-fchip", title: "Stop filtering by " + f.label.toLowerCase(), onclick: () => setFilter(f.id, false) }, f.label, icon("x"))),
-      h("span", { class: "qm-fcount", text: list.length.toLocaleString() + (more && !capped ? "+" : "") + " shown" }),
-      h("button", { type: "button", class: "qm-fclear", onclick: clearFilters }, "Show all", h("kbd", { text: "esc" })))] : []));
+    if (!on.length) fslot.replaceChildren();
+    else {
+      let bar = $(":scope > .qm-filterbar", fslot);
+      if (!bar) { bar = h("div", { class: "qm-filterbar", role: "status", "aria-label": "Filters on" }); fslot.replaceChildren(bar); }
+      bar.replaceChildren(icon("filter"), h("span", { class: "qm-flabel", text: "Only" }),
+        ...on.map((f) => h("button", { type: "button", class: "qm-fchip", title: "Stop filtering by " + f.label.toLowerCase(), onclick: () => setFilter(f.id, false) }, f.label, icon("x"))),
+        h("span", { class: "qm-fcount", text: fcount }),
+        h("button", { type: "button", class: "qm-fclear", onclick: clearFilters }, "Show all", h("kbd", { text: "esc" })));
+    }
   }
+  const fc = $(".qm-fcount", fslot);
+  if (fc && fc.textContent !== fcount) fc.textContent = fcount;
   const tail = $(".qm-tail", el);
   const ended = !on.length && calmEnded();
   const want = (ended ? "ended" : capped ? "reach" : more ? "more" : list.length ? "" : "empty") + "|" + on.map((f) => f.id).join();
@@ -2243,6 +2494,7 @@ function renderStream(r, all) {
       : kind === "ended" ? [h("div", { class: "qm-reach qm-ended" }, h("span", { text: "That's the last " + (cp().ends === "1m" ? "month" : "two weeks") + "." }), h("button", { type: "button", onclick: () => go("#all") }, "Older mail is in All mail"))]
       : kind === "empty" ? [h("div", { class: "qm-empty", text: isInboxFolder(folder) ? "Nothing here. Enjoy it." : "Nothing here." })] : []));
   }
+  if (cursor < 0 && cursorBack) { const i = list.findIndex((r) => r.id === cursorBack); if (i >= 0) { cursor = i; cursorId = cursorBack; } cursorBack = ""; }
   if (cursor >= 0 && cursorId) { const i = list.findIndex((r) => r.id === cursorId); if (i >= 0) cursor = i; } // (gone: the next one)
   if (cursor >= list.length) cursor = list.length - 1;
   cursorId = cursor >= 0 && list[cursor] ? list[cursor].id : "";
@@ -2385,6 +2637,7 @@ function rowDoThere(r, kind, rowEl, target) {
 /* …and in that account's tab: the same as its own buttons would do */
 const doneDo = new Set();
 function doHere(reqs) {
+  if (!enabled) return;
   for (const req of Array.isArray(reqs) ? reqs : reqs ? [reqs] : []) {
     if (!req || req.email !== accountEmail() || req.tab === TAB_ID || Date.now() - req.at > 15000 || doneDo.has(req.n)) continue;
     const lead = store.get("live:" + accountEmail(), null);
@@ -2457,6 +2710,8 @@ function ghostThread(r, fn) {
 const openThreadId = () => { const h2 = $("h2.hP", gmailMain() || document); return h2 ? h2.getAttribute("data-legacy-thread-id") || "" : ""; };
 async function ghostRun(r, fn) {
   await settlePeek();
+  // (you asked to go somewhere: it waits until you're there, and what you opened is on screen)
+  await until(() => !waitingGo && !opening, 6000, 60);
   const back = hashNow();
   // the list it's on (from inside a conversation: the list that conversation is in)
   const base = r.folder || (isThreadHash(back) ? parentHash(back) : baseHash(back));
@@ -2470,28 +2725,47 @@ async function ghostRun(r, fn) {
     else { went = threadHash(base, r.id); location.replace(went); }
     // this conversation open (not whichever one was on screen before), with its buttons
     const ok = await until(() => route().kind === "thread" && openThreadId() === String(r.id) && (gmailToolbar("7", ["Archive"]) || gmailToolbar("10", ["Delete"])), 8000, 80);
-    if (ok) await fn();
+    if (ok) { ghostFn = true; try { await fn(); } finally { ghostFn = false; } }
     return !!ok;
   } finally {
     // back where it was, unless you went somewhere else yourself meanwhile
     const now = hashNow();
-    const ours = now === went || isThreadHash(now) || baseHash(now) === baseHash(base);
+    const ours = now === went || (isThreadHash(now) && openThreadId() === String(r.id)) || baseHash(now) === baseHash(base);
     if (now !== back && ours) location.replace(back);
     release();
+    goWaiting();
     setTimeout(() => { if (--ghostJobs <= 0) { ghostJobs = 0; ghost = false; } invalidate(true); }, 250);
   }
 }
+/* a conversation that left the list from inside it (Done, Delete, Spam, Later): Done and Later take it out of the
+   inbox only; Delete and Spam out of everything but Trash and Spam themselves */
+function dropRow(id, how) {
+  if (!id) return;
+  id = String(id);
+  const f = everyFolder || "#inbox";
+  const leaves = how === "trash" || how === "spam" ? !/^#(trash|spam)$/.test(f) : isInboxFolder(f) || /^#category\//.test(f);
+  if (!leaves) return;
+  gone.set(id, Date.now());
+  for (const s of sources.values()) { const r = s.rows.get(id); if (r) { goneRows.set(id, r); s.rows.delete(id); } }
+  const k = boxKey(accountEmail(), f), box = store.get(k, null);
+  if (box && box.rows && box.rows.some((r) => r.id === id)) store.set(k, Object.assign({}, box, { rows: box.rows.filter((r) => r.id !== id), sig: "" }));
+}
+// (rows taken out here, kept a while: an undo puts the very row back where it was)
+const goneRows = new Map();
 function hideRow(r, rowEl, how) {
+  goneRows.set(String(r.id), r);
+  while (goneRows.size > 200) goneRows.delete(goneRows.keys().next().value);
   gone.set(r.id, Date.now());
   for (const s of sources.values()) s.rows.delete(r.id);
-  if (rowEl) rowAway(rowEl, how);
-  setTimeout(() => invalidate(true), prefersStill() ? 0 : 440); // (once it has gone and its space has closed)
+  if (rowEl && !prefersStill()) { rowsLeaving.set(r.id, { r, at: Date.now() }); rowAway(rowEl, how); }
+  setTimeout(() => { rowsLeaving.delete(r.id); invalidate(true); }, prefersStill() ? 0 : 620); // (once it has gone and its space has closed)
 }
-const binFolder = () => /^#(trash|spam)$/.test(everyFolder || baseHash(hashNow()));
+const hereFolder = () => (screen.kind === "stream" || screen.kind === "" ? everyFolder || baseHash(hashNow()) : baseHash(parentHash(hashNow())));
+const binFolder = () => /^#(trash|spam)$/.test(hereFolder());
 async function rowDo(r, kind, rowEl, anchor) {
   if (kind === "discard") { discardDrafts([r], rowEl ? [rowEl] : []); return; }
   // (in Trash and Spam there's nothing to archive, and deleting is for good)
-  if (kind === "done" && (binFolder() || everyFolder === "#drafts")) { toast("Done isn't available here."); return; }
+  if (kind === "done" && (binFolder() || hereFolder() === "#drafts")) { toast("Done isn't available here."); return; }
   let forever = false;
   if (kind === "trash" && binFolder()) {
     if (!(await confirmBox({ title: "Delete forever?", body: ["“" + (r.subject || "(no subject)") + "” will be gone for good. This can't be undone."], ok: "Delete forever", danger: true }))) return;
@@ -2531,10 +2805,28 @@ async function rowDo(r, kind, rowEl, anchor) {
     return;
   }
   hideRow(r, rowEl, kind);
-  if (!forever) pushUndo(kind === "done" ? { label: "Done “" + (r.subject || "") + "”", after: "Back in the inbox.", undo: () => unDone([r.id]) } : { label: "Deleted “" + (r.subject || "") + "”", after: "Back from Trash.", undo: () => unTrash([r.id]) });
+  const u = forever ? null : pushUndo(kind === "done" ? { label: "Done “" + (r.subject || "") + "”", after: "Back in the inbox.", ids: [r.id], undo: () => unDone([r.id]) } : { label: "Deleted “" + (r.subject || "") + "”", after: "Back from Trash.", ids: [r.id], undo: () => unTrash([r.id]) });
   const sel = kind === "done" ? ".brq, li[data-tooltip='Archive']" : forever ? ".bru, li[data-tooltip^='Delete forever' i], li[data-tooltip='Delete']" : ".bru, li[data-tooltip='Delete']";
   if (live && rowAction(live, sel, true)) return;
-  ghostThread(r, async () => { const b = kind === "done" ? gmailToolbar("7", ["Archive"]) : forever ? gmailToolbar("10", ["Delete forever"]) || gmailToolbar("10", ["Delete"]) : gmailToolbar("10", ["Delete"]); if (b) press(b); await wait(350); });
+  let pressed = false;
+  ghostThread(r, async () => { const b = kind === "done" ? gmailToolbar("7", ["Archive"]) : forever ? gmailToolbar("10", ["Delete forever"]) || gmailToolbar("10", ["Delete"]) : gmailToolbar("10", ["Delete"]); if (b) pressed = press(b); await wait(350); })
+    .then((ok) => { if (!ok || !pressed) putBack(r, u, kind === "done" ? "Couldn't put that away just now: Gmail didn't open it." : "Couldn't delete that just now: Gmail didn't open it."); }, () => putBack(r, u, "Couldn't do that just now."));
+}
+/* ⌘Z for something done from inside a conversation */
+function undoFor(id, kind, subject) {
+  if (!id) return;
+  pushUndo(kind === "done" ? { label: "Done “" + (subject || "") + "”", after: "Back in the inbox.", ids: [String(id)], undo: () => unDone([String(id)]) } : { label: "Deleted “" + (subject || "") + "”", after: "Back from Trash.", ids: [String(id)], undo: () => unTrash([String(id)]) });
+}
+/* what was taken out of the list for an action that didn't happen goes back, and says so */
+function putBack(r, u, say) {
+  gone.delete(String(r.id));
+  goneRows.delete(String(r.id));
+  const src = mainSource();
+  if (src && !src.rows.has(r.id)) src.rows.set(r.id, r);
+  if (u) { const i = undos.indexOf(u); if (i >= 0) undos.splice(i, 1); }
+  everyKeys = ["!redraw"];
+  invalidate(true);
+  if (say) toast(say);
 }
 function openRow(row) { press($(".xS", row) || row); }
 function rowAction(row, sel, quiet) {
@@ -2883,16 +3175,23 @@ function fillBrief(box, lines) {
   const sig = shown.map((l) => l.key).join() + "|" + !!lines.ready + "|" + lines.length;
   if (box.dataset.sig === sig) return;
   box.dataset.sig = sig;
+  // (a line that's still there stays the very same line: dismissing one doesn't make the others fade in again)
+  const old = new Map([...box.children].map((c) => [c.dataset.k, c]));
   const parts = shown.map((l) => {
+    const k = l.key + "|" + hashString(l.text + (l.acct || ""));
+    const keep = old.get(k);
+    if (keep && !keep.classList.contains("qm-out")) return keep;
     // whose it is: the account's colour square, as on every row (its name when you point at it)
     const sq = l.acct && accounts.length > 1 ? h("i", { class: "qm-acctsw qm-linesw", title: l.acct, "aria-label": l.acct }) : null;
     if (sq && l.email) sq.style.background = acctColor(l.email) || "var(--text-5)";
     const line = h("div", { class: "qm-line" + (l.open ? " qm-go" : "") }, h("p", { text: l.text }), sq);
+    line.dataset.k = k;
     if (l.open) $("p", line).addEventListener("click", l.open);
     line.appendChild(h("button", { type: "button", class: "qm-x", "aria-label": "Dismiss", onclick: () => collapseAway(line, () => { dismiss(l.key); box.dataset.sig = ""; invalidate(true); }) }, icon("x")));
     return line;
   });
-  box.replaceChildren(...parts);
+  parts.forEach((p, i) => { if (box.children[i] !== p) box.insertBefore(p, box.children[i] || null); });
+  while (box.children.length > parts.length) box.lastElementChild.remove();
 }
 
 /* ------------------------------------------------------------------ to-dos (Gmail's AI Inbox) */
@@ -2958,7 +3257,7 @@ async function settlePeek() {
 }
 for (const t of ["keydown", "mousedown", "wheel", "touchstart"]) window.addEventListener(t, () => { lastInput = Date.now(); if (peeking) peekAbort = true; }, { capture: true, passive: true });
 async function peekTodos() {
-  if (!aiOn() || peeking || Date.now() - lastPeek < 45 * 60 * 1000 || !$('.aeN a[href$="#aiinbox"]')) return;
+  if (!enabled || !aiOn() || peeking || Date.now() - lastPeek < 45 * 60 * 1000 || !$('.aeN a[href$="#aiinbox"]')) return;
   const back = hashNow();
   // only while the inbox list is simply on screen and nobody is doing anything
   const busy = findMode || findPending || menu || (gmailPop && gmailPop.els.some(visible)) || ROOT.classList.contains("qm-side-open") || ROOT.classList.contains("qm-writing") ||
@@ -2979,6 +3278,7 @@ async function peekTodos() {
   } finally {
     if (hashNow() === "#aiinbox") location.replace(back);
     release();
+    goWaiting();
     setTimeout(() => { peeking = false; invalidate(true); }, 300);
   }
 }
@@ -3250,7 +3550,7 @@ function renderFiles(r) {
     const c = fileCache.get(t.id);
     if (!c) continue;
     for (const f of c.list) {
-      if (files.kind !== "all" && f.kind !== files.kind) continue;
+      if (files.kind !== "all" && f.kind !== files.kind && !(files.kind === "doc" && f.kind === "text")) continue; // (a .txt is a document)
       if (files.from && (f.from.email || "").toLowerCase() !== files.from.email) continue;
       if (files.large && f.kind !== "drive" && f.size < 10 * 1048576) continue;
       if (want && !(f.name + " " + f.from.name + " " + f.from.email + " " + f.subject).toLowerCase().includes(want)) continue;
@@ -3339,7 +3639,7 @@ function renderFiles(r) {
       : tstate === "more" ? [h("div", { class: "qm-reach" }, h("button", { type: "button", onclick: () => filesMore(true) }, "Look further back"))]
       : tstate === "empty" ? [h("div", { class: "qm-empty", text: want || files.kind !== "all" || files.from || files.large ? "No files match." : "No files yet." })] : []));
   }
-  if (!loading && fileThreads.more && all.length < 24) filesMore();
+  if (!loading && fileThreads.more && all.length < 24 && !want) filesMore();
 }
 /* the next page of Gmail's search, read in as it comes */
 async function filesMore(force) {
@@ -3527,8 +3827,8 @@ function viewFile(f, list, from) {
       ib("x", "Close (esc)", closeFileView, "qm-s")].filter(Boolean));
     body.replaceChildren(h("div", { class: "qm-loading", "aria-label": "Loading" }, h("i"), h("i"), h("i")));
     body.classList.remove("qm-zoomed", "qm-canzoom");
-    if (x.kind === "image") {
-      const img = h("img", { src: x.view, alt: x.name, draggable: "false" });
+    if (x.kind === "image" && (x.view || x.thumb)) {
+      const img = h("img", { src: x.view || x.thumb, alt: x.name, draggable: "false" });
       // bigger than the window: a click shows it at its own size (scroll to look around), another fits it again
       img.addEventListener("click", (e) => {
         if (!body.classList.contains("qm-canzoom")) return;
@@ -3558,8 +3858,8 @@ function viewFile(f, list, from) {
       const whole = () => { const link = gmailViewer(x); closeFileView(); if (link) press(link); };
       body.replaceChildren(h("div", { class: "qm-fvdoc" }, x.preview ? h("img", { src: x.preview, alt: x.name, draggable: "false" }) : fileIcon(x, true),
         h("button", { type: "button", class: "qm-btn", onclick: whole }, icon("grow"), "Show all pages")));
-    } else if (x.kind === "text" && x.size < 2 * 1048576) {
-      try { const t = await getText(x.view.replace(location.origin, "")); if (f === x) body.replaceChildren(h("pre", { text: t.slice(0, 400000) })); }
+    } else if (x.kind === "text" && x.view && x.size < 2 * 1048576) {
+      try { const t = await getText(x.view.replace(location.origin, "")); const ev = /\.ics$/i.test(x.name) ? icsEvent(t) : null; if (f === x) body.replaceChildren(ev || h("pre", { text: t.slice(0, 400000) })); }
       catch (e) { if (f === x) body.replaceChildren(noPreview(x)); }
     } else body.replaceChildren(noPreview(x));
   };
@@ -3586,6 +3886,31 @@ function viewFile(f, list, from) {
   fileView = { scrim, onKey, from, panel };
   show(f);
   zoomFrom(panel, from && from.isConnected ? from.getBoundingClientRect() : null);
+}
+/* an invitation (.ics) as the event it is: what, when, where, who's asking; the file's own text if it holds none */
+function icsEvent(t) {
+  const raw = String(t || "").replace(/\r?\n[ \t]/g, ""); // (long lines are folded onto the next with a leading space)
+  const ev = (raw.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/) || [""])[0];
+  if (!ev) return null;
+  const get = (k) => { const m = new RegExp("^" + k + "(;[^:\\n]*)?:(.*)$", "mi").exec(ev); return m ? { params: m[1] || "", value: m[2].replace(/\\n/gi, "\n").replace(/\\([,;\\])/g, "$1").trim() } : null; };
+  const when = (p) => {
+    if (!p) return null;
+    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?/.exec(p.value);
+    if (!m) return null;
+    const allDay = !m[4];
+    const d = m[7] ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])) : new Date(+m[1], +m[2] - 1, +m[3], allDay ? 0 : +m[4], allDay ? 0 : +m[5]);
+    return { d, allDay };
+  };
+  const a = when(get("DTSTART")), b = when(get("DTEND"));
+  const sum = get("SUMMARY"), loc = get("LOCATION"), desc = get("DESCRIPTION"), org = get("ORGANIZER");
+  const day = (x) => x.d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: x.d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+  const hm = (x) => x.d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const span = a ? (a.allDay ? day(a) + " (all day)" : day(a) + ", " + hm(a) + (b && !b.allDay ? (b.d.toDateString() === a.d.toDateString() ? " – " + hm(b) : " – " + day(b) + ", " + hm(b)) : "")) : "";
+  const who = org ? ((/CN=("?)([^;:"]+)\1/i.exec(org.params) || [])[2] || org.value.replace(/^mailto:/i, "")) : "";
+  const row = (label, value) => (value ? h("div", { class: "qm-icsrow" }, h("span", { text: label }), h("b", { text: value })) : null);
+  return h("div", { class: "qm-ics" }, h("h2", { text: (sum && sum.value) || "Invitation" }),
+    row("When", span), row("Where", loc && loc.value), row("From", who),
+    desc && desc.value ? h("p", { text: desc.value.slice(0, 1200) }) : null);
 }
 /* Make room: a copy of every file is saved to this computer first (each one read in full before anything
    is deleted), then each email goes to Trash, where Gmail deletes it for good after 30 days. An email whose
@@ -3749,16 +4074,16 @@ function exitFind() {
   clearTimeout(askTimer);
   liveAt.at = 0;
   const h0 = hashNow();
-  if (/^#search\//.test(h0) && baseHash(h0) !== DONE_HASH) go(findReturn && !/^#search\//.test(findReturn) ? findReturn : "#inbox");
+  if (/^#search\//.test(h0) && baseHash(h0) !== DONE_HASH) go(findReturn && (!/^#search\//.test(findReturn) || baseHash(findReturn) === DONE_HASH) && findReturn !== h0 ? findReturn : "#inbox");
   else invalidate(true);
 }
 function openFind() {
   closeSide();
   // a page with its own finder (Files, Subscriptions): / goes there
-  const own = (screen.kind === "files" || screen.kind === "subs") && $("#qm-view .qm-subfind input");
+  const own = (screen.kind === "files" || screen.kind === "subs") && $("#qm-view .qm-subfind input:not(.qm-leaving *)");
   if (own && view && !view.hidden) { own.focus(); own.select(); return; }
-  if (!/^#search\//.test(hashNow())) findReturn = hashNow();
-  const input = $("#qm-view .qm-find input");
+  if (!/^#search\//.test(hashNow()) || baseHash(hashNow()) === DONE_HASH) findReturn = hashNow();
+  const input = $("#qm-view .qm-find input:not(.qm-leaving *)");
   if (input && !view.hidden) { input.focus(); input.select(); return; }
   findMode = true;
   findDraft = "";
@@ -3777,7 +4102,7 @@ function catchFindAhead(e) {
   else return false;
   e.preventDefault();
   e.stopImmediatePropagation();
-  const input = $("#qm-view .qm-find input");
+  const input = $("#qm-view .qm-find input:not(.qm-leaving *)");
   if (input) takeFindAhead(input);
   return true;
 }
@@ -3885,6 +4210,7 @@ function renderFind(r, rows) {
   const { el, fresh } = setScreen("find", "find", () => {
     const input = h("input", { type: "search", placeholder: "Find", "aria-label": "Find mail", autocomplete: "off", spellcheck: "false" });
     input.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); exitFind(); }
       else if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -3922,7 +4248,15 @@ function renderFind(r, rows) {
   }
   if (!rows) {
     const body = $(".qm-findbody", el);
-    if (body.dataset.pending !== String(!!findPending)) { body.dataset.pending = String(!!findPending); body.replaceChildren(...(findPending ? [h("div", { class: "qm-thinking", "aria-label": "Thinking" }, h("i"), h("i"), h("i"))] : [])); }
+    // (results already there: they stay, dimmed, until the next ones are in, rather than a moment of nothing)
+    const had = !!$(".qm-result", body);
+    const want = findPending || (r && had) ? (had ? "stale" : "think") : "none";
+    if (body.dataset.pending !== want) {
+      body.dataset.pending = want;
+      body.classList.toggle("qm-stale", want === "stale");
+      if (want === "think") body.replaceChildren(h("div", { class: "qm-thinking", "aria-label": "Thinking" }, h("i"), h("i"), h("i")));
+      else if (want === "none" && !had) body.replaceChildren();
+    }
     return;
   }
   if (rows.length && cursor < 0 && el.dataset.cursorSet !== q) { cursor = 0; el.dataset.cursorSet = q; }
@@ -3956,6 +4290,8 @@ function renderFind(r, rows) {
   if (sig === lastFindSig) return;
   lastFindSig = sig;
   const body = $(".qm-findbody", el);
+  body.classList.remove("qm-stale");
+  body.dataset.pending = "rows";
   const parts = [];
   const again = body.dataset.q === q && !!$(".qm-answer", body);
   body.dataset.q = q;
@@ -4265,11 +4601,15 @@ let expandedFor = "";
 function cloneBody(m) {
   const whole = wholeBodies.get(m.id);
   const b = whole || m.body;
-  const sig = (whole ? "w" : "") + b.childElementCount + ":" + b.textContent.length + ":" + b.getElementsByTagName("img").length;
+  // (pictures count by where they come from: Gmail swaps held-back ones for the real ones in place)
+  const pics = b.getElementsByTagName("img");
+  let srcs = "";
+  for (let i = 0; i < pics.length && i < 80; i++) srcs += (pics[i].getAttribute("src") || "") + "|";
+  const sig = (whole ? "w" : "") + b.childElementCount + ":" + b.textContent.length + ":" + pics.length + ":" + hashString(srcs);
   const hit = bodyCache.get(m.id);
   if (hit && hit.sig === sig) return hit;
   const node = b.cloneNode(true);
-  const hasMore = markQuotes(node) || !!node.querySelector(".qm-quote");
+  const hasMore = markQuotes(node) || !!node.querySelector(".qm-quote, .adL, .ajR");
   node.removeAttribute("id");
   for (const e of node.querySelectorAll("[id]")) e.removeAttribute("id");
   // Gmail's own "[Message clipped] View entire message" link would leave Gmail for a bare page
@@ -4280,15 +4620,18 @@ function cloneBody(m) {
   for (const q of own.querySelectorAll(".qm-quote, .gmail_quote, .gmail_quote_container, blockquote")) q.remove();
   const rich = isRich(own);
   if (rich) trimTail(node);
+  const dark = rich && darkAlready(node);
   const clipped = whole ? null : $('a[href*="view=lg"]', m.item);
-  const entry = { sig, node, rich, hasMore, clipped: clipped ? clipped.href : "", trackers };
+  const entry = { sig, node, rich, dark, hasMore, clipped: clipped ? clipped.href : "", trackers };
   bodyCache.set(m.id, entry);
   if (bodyCache.size > 300) bodyCache.delete(bodyCache.keys().next().value);
   return entry;
 }
 /* designed emails often end in a tall run of empty spacer rows: drop it so nothing gapes below */
 function trimTail(root) {
-  const solid = (el) => el.textContent.trim() || $$("img, svg, video, iframe, hr, input, button", el).some((x) => x.tagName !== "IMG" || ((x.getAttribute("width") || 9) > 2 && (x.getAttribute("height") || 9) > 2));
+  // (a picture is solid unless it's written as a pixel or two: "100%" or "auto" is a real picture)
+  const size = (x, a) => { const v = parseFloat(x.getAttribute(a) || ""); return Number.isFinite(v) ? v : 9; };
+  const solid = (el) => el.textContent.trim() || $$("img, svg, video, iframe, hr, input, button", el).some((x) => x.tagName !== "IMG" || (size(x, "width") > 2 && size(x, "height") > 2));
   for (let i = 0; i < 60; i++) {
     let n = root;
     while (n.lastElementChild) n = n.lastElementChild;
@@ -4297,11 +4640,12 @@ function trimTail(root) {
     n.remove();
   }
 }
+// (the list a conversation was opened from; anything that isn't a conversation goes back to the inbox)
 function parentHash(hash) {
-  const parts = hash.split("/");
-  if (parts.length > 1 && /^([A-Za-z0-9_-]{14,}|thread-[a-z]:[\w-]+)$/.test(parts[parts.length - 1])) parts.pop();
-  const p = parts.join("/");
-  return p === hash ? "#inbox" : p;
+  if (!isThreadHash(hash)) return "#inbox";
+  const parts = hash.split("?")[0].split("/");
+  parts.pop();
+  return parts.join("/") || "#inbox";
 }
 /* the bars are built once per screen and kept, so a click is never lost to a re-render */
 function threadBar(el, t) {
@@ -4311,7 +4655,7 @@ function threadBar(el, t) {
     right = h("div", { class: "qm-bar qm-right" },
       // a reaction to the newest email Gmail lets you react to (each message also has its own, beside it)
       ib("react", "React", (e) => { const m = reactTarget(); if (m) msgReact(m, e.currentTarget); else toast("Gmail doesn't offer reactions on this email."); }),
-      ib("done", "Done", () => { if (!press(gmailToolbar("7", ["Archive"]))) toast("Couldn't archive."); }),
+      ib("done", "Done", () => onThisThread(() => { const id = screen.key, subj = currentSubject(); if (press(gmailToolbar("7", ["Archive"]))) { dropRow(id, "done"); undoFor(id, "done", subj); } else toast("Couldn't archive."); })),
       menuButton("later", "Later", threadLater),
       menuButton("more", "More", threadMore));
     el.append(left, right);
@@ -4329,53 +4673,87 @@ function reactTarget(t) {
 }
 // the open conversation's star (its newest email's, as Gmail draws it)
 const starButton = () => { const main = gmailMain(); const all = main ? $$('.T-KT[aria-label], [aria-label="Not starred" i], [aria-label="Starred" i]', main).filter((x) => !x.closest("tr.zA") && visible(x)) : []; return all[all.length - 1] || null; };
+/* this conversation's star (Gmail's own, in its view of it): on or off */
+const threadStarred = () => { const b = starButton(); return !!b && /^starred/i.test(b.getAttribute("aria-label") || ""); };
+let starPop = null; // { id, at }: a star just given to this conversation, which pops in when the header is drawn
+/* star or unstar the open conversation (its menu, s, or the star by its title): the star by the title comes, with a
+   little pop, or goes */
+function toggleThreadStar() {
+  if (lookBusy()) { onThisThread(toggleThreadStar); return; }
+  const b = starButton();
+  if (!b) { toast("Couldn't star this one."); return; }
+  const mark = $("#qm-view .qm-hstar:not(.qm-leaving *)");
+  if (threadStarred()) { if (mark) play(mark, [{ scale: "1", opacity: 1 }, { scale: ".3", opacity: 0 }], { ms: 150, easing: ACCEL, fill: "forwards" }); }
+  else starPop = { id: screen.key, at: Date.now() };
+  press(b);
+  invalidate();
+}
+function starMark() {
+  if (!threadStarred()) return null;
+  const btn = h("button", { type: "button", class: "qm-hstar", "aria-label": "Starred. Remove star", title: withKey("Starred. Remove star", "star") }, icon("starred"));
+  btn.addEventListener("click", (e) => { e.stopPropagation(); toggleThreadStar(); });
+  if (starPop && starPop.id === screen.key && Date.now() - starPop.at < 3000) { starPop = null; requestAnimationFrame(() => popStarIn(btn)); }
+  return btn;
+}
 async function threadLater(anchor) {
+  if (lookBusy()) await afterLook();
   const direct = gmailToolbar(null, ["Snooze"]);
   if (direct) { await openGmailPopup(async () => press(direct), anchor); return; }
   const moreBtn = gmailToolbar(null, ["More email options", "More"]);
   if (!(await pressGmailMenuItem(moreBtn, "Snooze", anchor))) toast("Snooze isn't available here.");
 }
 async function threadMore(anchor) {
+  if (menu && menu.key === menuKey(anchor)) { closeMenu(); return; }
+  if (lookBusy()) await afterLook();
   const moreBtn = gmailToolbar(null, ["More email options", "More"]);
-  const fromGmail = moreBtn ? await gmailMenuItems(moreBtn) : [];
-  const skip = /^(snooze|mark as read|mark all as read|forward all)$|^(switch to|turn (off|on) highlighting)/i;
+  const reading = screen.kind === "reading";
+  const main = gmailMain();
+  const m = reading && main && $("h2.hP", main) ? readThread(main).messages[0] : null;
+  const mb = m ? msgButtons(m).moreBtn : null;
+  const a = gmailMenuSoon(moreBtn, "thread"), b = reading ? gmailMenuSoon(mb, "reading") : { now: [], later: Promise.resolve([]) };
+  const both = Promise.all([a.later, b.later]);
+  const el = openMenu(anchor, threadMoreItems(anchor, a.now, b.now, moreBtn, mb, m, both));
+  both.then(([x, y]) => { if (el && (!sameList(x, a.now) || !sameList(y, b.now))) refillMenu(el, threadMoreItems(anchor, x, y, moreBtn, mb, m, both)); });
+}
+function threadMoreItems(anchor, fromGmail, mine, moreBtn, mb, m, read) {
+  // (one of Gmail's own: pressed once Gmail's menu, read out of sight, has been put away)
+  const viaGmail = (btn, label) => () => read.then(([x, y]) => (x.concat(y).includes(label) ? pressGmailMenuItem(btn, label, anchor) : toast("That isn't available for this conversation.")));
+  const st = starButton();
+  // (Gmail's own "Add star" is the star below, so starring always shows by the title)
+  const skip = st ? /^(snooze|mark as read|mark all as read)$|^(switch to|turn (off|on) highlighting)|^(add|remove) star$/i : /^(snooze|mark as read|mark all as read)$|^(switch to|turn (off|on) highlighting)/i;
   const have = (re) => fromGmail.some((l) => re.test(l));
   const items = [];
-  const tb = (act, titles, label) => { const b = gmailToolbar(act, titles); if (b) items.push({ label, run: () => press(b) }); };
-  tb("2", ["Mark as unread"], "Mark unread");
+  const unreadB = gmailToolbar("2", ["Mark as unread"]);
+  if (unreadB) items.push({ label: "Mark unread", run: () => { const id = screen.key; if (press(unreadB)) markUnreadHere(id); } });
   // everything Gmail's own bar has for a conversation is here too: star, move, labels, tasks
-  const st = !have(/^(add|remove) star/i) && starButton();
-  if (st) items.push({ label: /^starred/i.test(st.getAttribute("aria-label") || "") ? "Remove star" : "Star", run: () => press(st) });
+  if (st) items.push({ label: threadStarred() ? "Remove star" : "Star", run: () => toggleThreadStar() });
   const move = !have(/^move to/i) && gmailToolbar(null, ["Move to"]);
   if (move) items.push({ label: "Move to", run: () => openGmailPopup(async () => press(move), anchor) });
   const labels = !have(/^label/i) && gmailToolbar(null, ["Labels", "Label as"]);
   if (labels) items.push({ label: "Labels", run: () => openGmailPopup(async () => press(labels), anchor) });
   const tasks = !have(/^add to tasks/i) && gmailToolbar(null, ["Add to Tasks"]);
   if (tasks) items.push({ label: "Add to Tasks", run: () => { press(tasks); toast("Added to Tasks."); } });
-  for (const label of fromGmail) if (!skip.test(label)) items.push({ label, run: () => pressGmailMenuItem(moreBtn, label, anchor) });
+  for (const label of fromGmail) if (!skip.test(label)) items.push({ label, run: viaGmail(moreBtn, label) });
   // a single email: what Gmail keeps in the email's own menu, too (in a conversation, each message has its own)
-  if (screen.kind === "reading") {
-    const main = gmailMain();
-    const m = main && $("h2.hP", main) ? readThread(main).messages[0] : null;
-    const mb = m ? msgButtons(m).moreBtn : null;
-    const mine = mb ? await gmailMenuItems(mb) : [];
+  if (m) {
     const known = new Set(items.filter((x) => x && x.label).map((x) => x.label.toLowerCase()));
     const own = mine.filter((l) => /^(forward as attachment|filter messages like this|translate|download message|show original|block |report phishing)/i.test(l) && !known.has(l.toLowerCase()));
     if (m && (m.body || own.length)) {
       items.push("-");
       if (m.body) items.push({ label: "Copy text", run: () => { navigator.clipboard.writeText(m.body.innerText.trim()).then(() => toast("Copied."), () => toast("Couldn't copy.")); } });
-      for (const l of own) items.push({ label: l, run: () => pressGmailMenuItem(mb, l, anchor) });
+      for (const l of own) items.push({ label: l, run: viaGmail(mb, l) });
     }
   }
   items.push("-");
-  tb("9", ["Report spam"], "Report spam");
-  tb("10", ["Delete"], "Delete");
+  const spamB = gmailToolbar("9", ["Report spam"]), delB = gmailToolbar("10", ["Delete"]);
+  if (spamB) items.push({ label: "Report spam", run: () => { const id = screen.key; if (press(spamB)) dropRow(id, "spam"); } });
+  if (delB) items.push({ label: "Delete", run: () => { const id = screen.key, subj = currentSubject(); if (press(delB)) { dropRow(id, "trash"); undoFor(id, "trash", subj); } } });
   items.push("-");
   const print = $('[aria-label="Print all"]');
   if (print) items.push({ label: "Print", run: () => press(print) });
   const win = $('[aria-label="In new window"]');
   if (win) items.push({ label: "Open in new window", run: () => press(win) });
-  openMenu(anchor, items);
+  return items;
 }
 /* the message as Gmail has it right now (Gmail redraws messages, e.g. after expanding a conversation) */
 function liveItem(m) {
@@ -4393,9 +4771,17 @@ function msgButtons(m) {
 }
 /* the design's order first, Gmail's rarer actions after, noise left out */
 async function msgMore(m, anchor) {
+  if (menu && menu.key === menuKey(anchor)) { closeMenu(); return; }
+  if (lookBusy()) await afterLook();
   const { moreBtn } = msgButtons(m);
-  const labels = moreBtn ? await gmailMenuItems(moreBtn) : [];
-  const gm = (re, label) => { const l = labels.find((x) => re.test(x)); return l ? { label: label || l, run: () => pressGmailMenuItem(moreBtn, l, anchor) } : null; };
+  const g = gmailMenuSoon(moreBtn, "msg");
+  // (nothing known of Gmail's yet, the very first time: that one waits for them, so it isn't nearly empty)
+  const now = g.now.length ? g.now : await g.later;
+  const el = openMenu(anchor, msgMoreItems(m, anchor, moreBtn, now, g.later));
+  g.later.then((x) => { if (el && !sameList(x, now)) refillMenu(el, msgMoreItems(m, anchor, moreBtn, x, g.later)); });
+}
+function msgMoreItems(m, anchor, moreBtn, labels, read) {
+  const gm = (re, label) => { const l = labels.find((x) => re.test(x)); return l ? { label: label || l, run: () => read.then(() => pressGmailMenuItem(moreBtn, l, anchor)) } : null; };
   const entry = m.body && !m.collapsed ? cloneBody(m) : null;
   const items = [];
   if (entry && entry.hasMore && !entry.rich) items.push({ label: showAll.has(m.id) ? "Hide quoted text" : "Show quoted text", run: () => toggleQuoted(m) });
@@ -4403,7 +4789,7 @@ async function msgMore(m, anchor) {
   items.push(gm(/^mark (as )?unread/i, "Mark unread from here"), gm(/^forward as attachment/i), gm(/^print/i), "-",
     gm(/^translate/i), gm(/^download/i), gm(/^show original/i), "-",
     gm(/^filter messages/i), gm(/^block /i), gm(/^report spam/i), gm(/^report phishing/i), gm(/^delete/i));
-  openMenu(anchor, items.filter(Boolean));
+  return items.filter(Boolean);
 }
 function toggleQuoted(m) {
   if (showAll.has(m.id)) showAll.delete(m.id);
@@ -4421,13 +4807,24 @@ function msgReact(m, anchor) {
   closeMenu();
   const el = h("div", { class: "qm-menu qm-emoji", role: "menu", "aria-label": "React" },
     REACTIONS.map((e) => h("button", { type: "button", role: "menuitem", tabindex: "-1", title: "React " + e, onclick: (ev) => { const from = ev.currentTarget.getBoundingClientRect(); closeMenu(); react(m, e); flyEmoji(e, from, m.id); } }, e)));
+  el.addEventListener("keydown", (e) => {
+    const all = $$('[role="menuitem"]', el);
+    const i = all.indexOf(document.activeElement);
+    if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); const fwd = e.key === "ArrowRight" || e.key === "ArrowDown"; const n = all[(i + (fwd ? 1 : all.length - 1)) % all.length]; if (n) n.focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeMenu(); if (anchor.isConnected) anchor.focus({ preventScroll: true }); }
+  });
   document.body.appendChild(el);
   placeUnder(el, anchor);
-  el.style.transformOrigin = "top right";
+  const ar = anchor.getBoundingClientRect();
+  const above = el.getBoundingClientRect().top < ar.top;
+  el.style.transformOrigin = (above ? "bottom " : "top ") + "right";
+  el.style.setProperty("--qm-from-y", above ? "4px" : "-4px");
   anchor.setAttribute("aria-expanded", "true");
   menu = { el, anchor, key: k };
   const holder = anchor.closest(".qm-msg");
   if (holder) holder.classList.add("qm-on");
+  const first = $('[role="menuitem"]', el);
+  if (first) first.focus({ preventScroll: true });
 }
 async function react(m, emoji) {
   const item = liveItem(m);
@@ -4497,6 +4894,7 @@ const threadWindow = () => $$('.nH.Hd[role="dialog"]').find((d) => d.dataset.qmT
 // this conversation's reply window on its way back into the box (closed or minimized a moment ago)
 const closingWindow = () => $$('.nH.Hd[role="dialog"][data-qm-closing]').find((d) => d.isConnected && visible(d) && d.dataset.qmThread === screen.key);
 function msgReply(m, how, anchor, cleared) {
+  if (lookBusy()) return onThisThread(() => msgReply(m, how, anchor, cleared));
   const open = how !== "forward" && threadWindow();
   if (open) {
     if (isMinimized(open)) press($$("button.Hl, [aria-label='Minimize' i], [aria-label='Maximize' i]", open).find((b) => !b.closest(".qm-whead")));
@@ -4555,6 +4953,12 @@ function msgReply(m, how, anchor, cleared) {
   }
   return openReply(anchor, kind, press1, "", null, how === "forward");
 }
+/* a reply that reaches fewer people than the newest email in its conversation is between */
+function narrowed(ip) {
+  const main = gmailMain();
+  const t = main && $("h2.hP", main) ? readThread(main) : null;
+  return !!t && rcptSig(ip).split(",").filter(Boolean).length < othersOn(t);
+}
 /* who an open reply goes to (besides you) */
 const rcptSig = (ip) => [...new Set($$("[email]", ip).filter((e) => !e.closest(".editable")).map((e) => (e.getAttribute("email") || "").toLowerCase()))].filter((e) => e && e !== accountEmail()).sort().join(",");
 /* The box opens Reply all ahead of time. "Reply" needs a switch only when that would reach more than one
@@ -4585,9 +4989,10 @@ async function replyAs(ip, how) {
   }
   if ((how !== "reply" && how !== "all") || !ip || !ip.isConnected) return true;
   const before = rcptSig(ip);
-  // Reply: only when this one reaches more than one person. Reply all: only when it was narrowed to one before.
+  // Reply: only when this one reaches more than one person. Reply all: only when it reaches fewer than the newest
+  // email is between (narrowed by Umbra, or a draft Gmail kept from a Reply)
   if (how === "reply" && before.split(",").filter(Boolean).length <= 1) return true;
-  if (how === "all" && ip.dataset.qmHow !== "reply") return true;
+  if (how === "all" && ip.dataset.qmHow !== "reply" && !narrowed(ip)) return true;
   const b = $('[aria-label="Type of response" i]', ip);
   const m = b && (await gmailMenu(b));
   // (no "Reply to all" offered: there's no one else to add, and the reply goes ahead as it is)
@@ -4631,11 +5036,16 @@ const FWD_TAKEN = "Gmail keeps one draft per conversation, so your reply became 
 const replyWindowHere = () => $$('.nH.Hd[role="dialog"]').find((d) => d.dataset.qmThread && d.dataset.qmThread === screen.key && !d.dataset.qmFwd && !d.dataset.qmClosing && d.isConnected && visible(d));
 async function forwardInPlace(dlg) {
   const said = ownText($(".editable", dlg) || dlg);
+  const yours = $$(".dL", dlg).length; // (files you'd attached to the reply: yours, not the forwarded email's)
   if (bodyHidden(dlg)) { const up = gmailBtn(dlg, "button.Hl, [aria-label='Maximize' i]"); if (up) press(up); await until(() => !bodyHidden(dlg), 1500, 30); }
   if (!(await replyAs(dlg, "forward")) || !isForward(dlg)) { toast("Couldn't forward just now. Your reply is as it was."); return dlg; }
   dlg.dataset.qmFwd = "1";
   dlg.dataset.qmTitle = "Fwd: " + (currentSubject() || "");
-  dlg.dataset.qmFiles0 = String($$(".dL", dlg).length);
+  // the forwarded email's own files (Gmail adds them a moment after the switch): what closing an untouched forward
+  // may leave behind; anything beyond them is yours, and keeps it a draft
+  const baseline = () => { dlg.dataset.qmFiles0 = String(Math.max(0, $$(".dL", dlg).length - yours)); };
+  baseline();
+  setTimeout(baseline, 900);
   decorateWriting();
   focusToSoon(dlg);
   if (said.trim()) toast(FWD_TAKEN);
@@ -4663,6 +5073,7 @@ async function focusTo(dlg) {
 }
 /* this conversation's reply window: the open one, or a new one growing out of `from` */
 function replyBarAction(how, from, landed) {
+  if (lookBusy()) return onThisThread(() => replyBarAction(how, from, landed));
   // "keep": the reply in the box goes into a window as it is (a new one is Reply all)
   const keep = how === "keep";
   if (keep) how = "all";
@@ -4692,7 +5103,7 @@ function replyBarAction(how, from, landed) {
     return Promise.resolve(mine);
   }
   const cbx = composerBox();
-  const src = from || (cbx && visible(cbx) ? cbx : null) || $$("#qm-view .qm-endacts .qm-minibtn, #qm-view .qm-article-bottom button").find(visible) || null;
+  const src = from || (cbx && visible(cbx) ? cbx : null) || $$("#qm-view .qm-endacts .qm-minibtn:not(.qm-leaving *), #qm-view .qm-article-bottom button:not(.qm-leaving *)").find(visible) || null;
   const kind = src && src.classList.contains("qm-cbox") ? "reply" : "pill";
   // from the bar: its own draft (Gmail may be redrawing the conversation just now, e.g. opening it whole)
   const c = kind === "reply" ? composerOf() : null;
@@ -4747,9 +5158,24 @@ async function openReply(from, kind, start, mode, prepare, fwd) {
         if (ip) { ip.dataset.qmFloat = "1"; invalidate(true); } // no pop-out here: float Gmail's own reply
         return ip || null;
       }
-      press(pop);
-      const dlg = await until(() => $$('.nH.Hd[role="dialog"]').find((d) => !before.has(d) && visible(d)), 6000, 16);
-      if (!dlg) { endOpen(ctx); return null; }
+      // (just after Gmail made the reply it doesn't hear its Pop out button yet: it waits until its editor and Send are
+      // there, and is asked again while the reply is still in place and no window has come)
+      await until(() => $(".editable", ip) && $(".T-I.aoO, [data-tooltip^='Send' i]", ip), 3000, 30);
+      const popped = () => $$('.nH.Hd[role="dialog"]').find((d) => !before.has(d) && visible(d));
+      let dlg = null;
+      // (Gmail hears it about a tenth of a second after it made the reply: asked again that often, for a couple of seconds)
+      for (let i = 0; i < 14 && !dlg; i++) {
+        const b = ip.isConnected && ($$('[aria-label="Pop out reply" i]', ip).find(visible) || $('[aria-label="Pop out reply" i]', ip));
+        if (i && !b) { dlg = await until(popped, 3000, 16); break; } // (it's on its way: Gmail took the reply out already)
+        press(b || pop);
+        dlg = await until(popped, 140, 16);
+      }
+      if (!dlg) {
+        // no window: Gmail's own reply floats instead, so it's never left out of sight with the keyboard in it
+        endOpen(ctx);
+        if (ip.isConnected && $(".M9", ip)) { ip.dataset.qmFloat = "1"; invalidate(true); return ip; }
+        return null;
+      }
       freshWindow(dlg);
       dlg.dataset.qmThread = thread;
       dlg.dataset.qmHome = "reply";
@@ -4767,7 +5193,7 @@ async function openReply(from, kind, start, mode, prepare, fwd) {
         before: () => ROOT.classList.add("qm-replying"),
       });
       // (the files a forward brings along are the email's, not something you added)
-      if (dlg.dataset.qmFwd) dlg.dataset.qmFiles0 = String($$(".dL", dlg).length);
+      if (dlg.dataset.qmFwd) { dlg.dataset.qmFiles0 = String($$(".dL", dlg).length); setTimeout(() => { if (dlg.isConnected) dlg.dataset.qmFiles0 = String(Math.max(Number(dlg.dataset.qmFiles0 || 0), $$(".dL", dlg).length)); }, 900); } // (Gmail adds them a moment later)
       const box = $(".editable", dlg);
       if (dlg.dataset.qmFwd) { if (!$$("input", dlg).some((i) => i === document.activeElement)) focusToSoon(dlg); }
       else if (box) box.focus();
@@ -4780,7 +5206,7 @@ async function openReply(from, kind, start, mode, prepare, fwd) {
     } finally {
       ROOT.classList.remove("qm-popping");
       if (c) { c.root.classList.remove("qm-handing"); c.ta.value = ""; autosize(c); }
-      setTimeout(() => { replyOpening = null; }, 50);
+      setTimeout(() => { replyOpening = null; invalidate(); }, 50);
     }
   })();
   return replyOpening;
@@ -4922,6 +5348,9 @@ const frameOf = (r, f, radius) => ({
   clipPath: `inset(0px ${(r.width - f.width).toFixed(1)}px ${(r.height - f.height).toFixed(1)}px 0px round ${Math.max(0, radius).toFixed(1)}px)`,
 });
 const unframe = (dlg) => { dlg.style.clipPath = ""; dlg.style.transform = ""; };
+/* under a window that's growing or shrinking, its own colour, so it's never see-through half way (only when that
+   colour is solid: a see-through one, doubled, would darken and then lighten as the copy goes) */
+const underBg = (bg) => { const m = /rgba?\(([^)]+)\)/.exec(bg || ""); const a = m ? m[1].split(/[,\s/]+/).filter(Boolean)[3] : null; return m && (a === undefined || Number(a) >= 0.99) ? bg : "rgba(0, 0, 0, 0)"; };
 /* a window's box where it rests (not where an opening or closing is carrying it just now) */
 function restBox(dlg) {
   const r = dlg.getBoundingClientRect();
@@ -4975,6 +5404,7 @@ async function finishOpen(ctx, dlg, opts = {}) {
     // ready: Gmail has drawn its editor and Send (and a moved reply has its words)
     const filled = () => { const ed = $(".editable", dlg); return !!ed && ed.offsetHeight > 16 && !!$(".T-I.aoO, [data-tooltip^='Send' i]", dlg) && (!opts.expect || ownText(ed).includes(opts.expect.slice(0, 16))); };
     await until(filled, 4000, 16);
+    if (opts.fill) { try { await opts.fill(dlg); } catch (e) { /* it opens as it is */ } }
     if (opts.focus) { try { opts.focus(dlg); } catch (e) { /* a nicety */ } }
     decorateWriting(); // Umbra's header on it, titled
     // where it goes, at the size it settles at
@@ -5012,94 +5442,89 @@ function follow(dlg, r, moved) {
   requestAnimationFrame(tick);
   return () => { on = false; };
 }
-/* grow a window (already in place, out of sight) out of `src` ({ rect, el } or { rect, look }) */
+/* How a window comes out of what you clicked, and goes back into it. Only its position, size (one scale for both
+   ways, so its words never stretch) and opacity move: the browser does that on its own, smoothly, however busy Gmail
+   is. From something small (the + button, a chip, a button) it grows out of it; from the reply box, which is as
+   wide as a window, it rises out of it; from a window of another size (full size and back) it scales from that. */
+function windowMotion(win, from) {
+  const cx = from.left + from.width / 2 - (win.left + win.width / 2), cy = from.top + from.height / 2 - (win.top + win.height / 2);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  if (from.width <= 260 && from.height <= 96) return { kind: "small", k: clamp(Math.max(from.width / win.width, from.height / win.height) * 1.8, 0.18, 0.55), dx: cx, dy: cy };
+  if (from.width >= win.width * 0.85 && from.height < win.height * 0.45) return { kind: "bar", k: 0.965, dx: clamp(cx, -240, 240) * 0.5, dy: clamp(cy, -160, 160) * 0.5 };
+  return { kind: "window", k: clamp(from.width / win.width, 0.5, 1.25), dx: cx, dy: cy };
+}
+const motionAt = (m) => `translate(${m.dx.toFixed(1)}px, ${m.dy.toFixed(1)}px) scale(${m.k.toFixed(3)})`;
+/* grow a window (already in place, out of sight) out of `src` ({ rect, el } or { rect, look }); `last` runs as it
+   takes over from what it came out of */
 function reveal(dlg, src, last) {
   const r = restBox(dlg);
-  const wl = lookOf(dlg);
-  if (!src) {
+  if (!src || prefersStill()) {
     if (last) last();
     delete dlg.dataset.qmGone;
-    return ended(dlg.animate([{ opacity: 0, transform: "translateY(10px) scale(.98)" }, { opacity: 1, transform: "none" }], { duration: 240, easing: EASE_OUT }), 240);
+    if (prefersStill()) return Promise.resolve();
+    return ended(dlg.animate([{ opacity: 0, transform: "translateY(10px) scale(.98)" }, { opacity: 1, transform: "none" }], { duration: 240 * slowMo(), easing: EASE_OUT }), 240 * slowMo());
   }
-  const s = src.rect, sl = src.look || lookOf(src.el);
-  // underneath: the window's shadow, growing with it; on top: what you clicked, fading into it
-  const plate = shellAt(s, sl, "qm-m-plate");
-  const face = src.el ? shellAt(s, sl, "qm-m-top") : null;
-  const giveBack = face ? standIn(src.el) : () => {};
-  if (face) face.appendChild(anchored(faceOf(src.el, src.typed), s, r));
-  const pl = Object.assign({}, wl, { bg: "rgba(0, 0, 0, 0)" }), fl = Object.assign({}, sl, { shadow: SHADOW_NONE });
-  const winFrames = (b) => [frameOf(b, s, sl.radius), frameOf(b, rectOf(b), wl.radius)];
-  Object.assign(dlg.style, winFrames(r)[0]);
+  const m = windowMotion(r, src.rect);
+  const ms = (m.kind === "window" ? 420 : 460) * slowMo();
+  const opacity = m.kind === "small" ? [0, 1, 0.28] : m.kind === "bar" ? [0, 1, 0.4] : [1, 1, 0.5];
+  // the reply box it rises from fades as the window comes, and is put away (out of sight) once the window covers it
+  const fromBox = src.el && src.el.classList && src.el.classList.contains("qm-cbox");
+  const boxOut = fromBox ? play(src.el, [{ opacity: 1 }, { opacity: 0 }], { ms: 140, easing: "ease-out", fill: "forwards" }) : null;
+  let handed = false;
+  const hand = () => { if (handed) return; handed = true; if (last) last(); if (boxOut) boxOut.cancel(); };
+  if (fromBox) setTimeout(hand, 150 * slowMo()); else hand();
+  dlg.style.transformOrigin = "50% 50%";
   delete dlg.dataset.qmGone;
-  const ms = 480 * slowMo();
-  const how = { duration: ms, easing: EASE_OUT, fill: "forwards" }; // it settles; it never overshoots and comes back
-  const grow = dlg.animate(winFrames(r), how);
-  // what you clicked becomes the window: its look fades out as the window's content fades in, both while it grows
-  const inA = face ? dlg.animate([{ opacity: 0 }, { opacity: 0, offset: 0.06 }, { opacity: 1, offset: 0.46 }, { opacity: 1 }], { duration: ms, fill: "forwards" }) : null;
-  const plateA = plate.animate(shapeFrames(s, sl, rectOf(r), pl), how);
-  const faceA = face ? face.animate(shapeFrames(s, sl, rectOf(r), fl), how) : null;
-  if (face) face.animate([{ opacity: 1 }, { opacity: 1, offset: 0.04 }, { opacity: 0, offset: 0.42 }, { opacity: 0 }], { duration: ms, fill: "forwards" });
-  const stop = follow(dlg, r, (b) => {
-    grow.effect.setKeyframes(winFrames(b));
-    plateA.effect.setKeyframes(shapeFrames(s, sl, b, pl));
-    if (faceA) faceA.effect.setKeyframes(shapeFrames(s, sl, b, fl));
-  });
-  return ended(grow, ms).then(() => {
-    stop();
-    if (last) last();
-    grow.cancel();
-    if (inA) inA.cancel();
-    unframe(dlg);
-    plate.remove();
-    if (face) face.remove();
-    giveBack();
-  });
+  const grow = dlg.animate([
+    { transform: motionAt(m), opacity: opacity[0] },
+    { opacity: opacity[1], offset: opacity[2] },
+    { transform: "none", opacity: 1 },
+  ], { duration: ms, easing: SPRING.smooth.e, fill: "backwards" });
+  return ended(grow, ms).then(() => { hand(); grow.cancel(); dlg.style.transformOrigin = ""; unframe(dlg); });
 }
 /* shrink a window into `to` (the box, the + button, a chip), then let Gmail close (or minimize) it
-   (`typed`: the words a reply brings back into the box, so the box looks as it will) */
+   (`typed`: the words a reply brings back into the box, shown there at once, before Gmail has put them back) */
 function conceal(dlg, to, then, typed) {
   const r = restBox(dlg);
-  const wl = lookOf(dlg);
   dlg.style.pointerEvents = "none";
-  const cleanup = () => { dlg.style.pointerEvents = ""; unframe(dlg); };
-  if (!to || !visible(to)) {
-    const out = dlg.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(10px) scale(.97)" }], { duration: 170, easing: "ease", fill: "forwards" });
-    return ended(out, 170).then(() => { then(); setTimeout(() => { out.cancel(); cleanup(); }, 60); });
+  const cleanup = () => { dlg.style.pointerEvents = ""; dlg.style.transformOrigin = ""; unframe(dlg); };
+  if (!to || !visible(to) || prefersStill()) {
+    const ms = prefersStill() ? 1 : 170 * slowMo();
+    const out = dlg.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(10px) scale(.97)" }], { duration: ms, easing: "ease", fill: "forwards" });
+    return ended(out, ms).then(() => { then(); setTimeout(() => { out.cancel(); cleanup(); }, 60); });
   }
+  const t = boxOf(to);
+  const m = windowMotion(r, t);
+  const intoBox = to.classList.contains("qm-cbox");
+  // what it goes into is back already (shown, and takes your next click), and comes up as the window lands
   to.classList.add("qm-morph-dest");
-  const t = boxOf(to), tl = lookOf(to);
-  const plate = shellAt(rectOf(r), Object.assign({}, wl, { bg: "rgba(0, 0, 0, 0)" }), "qm-m-plate");
-  const face = shellAt(rectOf(r), Object.assign({}, tl, { shadow: SHADOW_NONE }), "qm-m-top");
-  face.appendChild(anchored(faceOf(to, typed), t, r));
-  const giveBack = standIn(to);
-  const ms = 380 * slowMo();
-  const pl = Object.assign({}, wl, { bg: "rgba(0, 0, 0, 0)" }), fl = Object.assign({}, tl, { shadow: SHADOW_NONE });
-  const winFrames = (b) => [frameOf(b, rectOf(b), wl.radius), frameOf(b, t, tl.radius)];
-  const how = { duration: ms, easing: EASE_IN_OUT, fill: "forwards" };
-  const shrink = dlg.animate(winFrames(r), how);
-  // the window's content fades as it shrinks while what it becomes fades in, both through the middle of the way
-  // (never the content squeezed into the button's shape, then the button appearing all at once)
-  const outA = dlg.animate([{ opacity: 1 }, { opacity: 1, offset: 0.08 }, { opacity: 0, offset: 0.52 }, { opacity: 0 }], { duration: ms, fill: "forwards" });
-  const plateA = plate.animate(shapeFrames(rectOf(r), pl, t, tl), how);
-  const faceA = face.animate(shapeFrames(rectOf(r), fl, t, fl), how);
-  face.animate([{ opacity: 0 }, { opacity: 0, offset: 0.12 }, { opacity: 1, offset: 0.58 }, { opacity: 1 }], { duration: ms, fill: "forwards" });
-  const stop = follow(dlg, r, (b) => {
-    shrink.effect.setKeyframes(winFrames(b));
-    plateA.effect.setKeyframes(shapeFrames(b, pl, t, tl));
-    faceA.effect.setKeyframes(shapeFrames(b, fl, t, fl));
-  });
+  if (intoBox) ROOT.classList.remove("qm-replying");
+  // (a reply with words in it: those words are in the box from the moment it lands, before Gmail has put the draft back)
+  let copy = null;
+  if (intoBox && typed) {
+    copy = shellAt(t, Object.assign({}, lookOf(to), { shadow: SHADOW_NONE }), "qm-m-top");
+    copy.appendChild(anchored(faceOf(to, typed), t, t));
+  }
+  const giveBack = copy ? standIn(to) : () => {};
+  const ms = (m.kind === "small" ? 320 : 260) * slowMo();
+  dlg.style.transformOrigin = "50% 50%";
+  const shrink = dlg.animate([
+    { transform: "none", opacity: 1 },
+    { opacity: m.kind === "small" ? 0.9 : 0.75, offset: 0.45 },
+    { transform: motionAt(m), opacity: 0 },
+  ], { duration: ms, easing: m.kind === "small" ? "cubic-bezier(.4, 0, .2, 1)" : "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" });
+  const landing = [{ opacity: 0, transform: m.kind === "small" ? "scale(.7)" : "translateY(6px)" }, { opacity: 0, offset: 0.4, transform: m.kind === "small" ? "scale(.7)" : "translateY(6px)" }, { opacity: 1, transform: "none" }];
+  const toIn = play(copy || to, landing, { ms: ms + 120 * slowMo(), easing: "cubic-bezier(.2, .8, .3, 1)", fill: "backwards" });
   return ended(shrink, ms).then(() => {
-    stop();
     dlg.dataset.qmGone = "1";
     const settled = then();
     decorateWriting(); // nothing's open now: the + button (or the box) is there to click at once
-    // the copy stays exactly over what it became until that's ready to show itself (a reply's words back in the box)
+    // the copy stays exactly over the box until the box is ready to show the words itself
     return Promise.resolve(settled).catch(() => {}).then(nextFrame).then(() => {
+      if (toIn && !copy) afterAnim(toIn, () => {});
       giveBack();
-      plate.remove();
-      face.remove();
+      if (copy) copy.remove();
       shrink.cancel();
-      outA.cancel();
       setTimeout(() => { if (!to.qmStandIn) to.classList.remove("qm-morph-dest"); }, 400);
       setTimeout(() => { cleanup(); if (dlg.isConnected && dlg.dataset.qmGone && !dlg.dataset.qmClosing) delete dlg.dataset.qmGone; }, 400);
     });
@@ -5117,10 +5542,10 @@ const near = (a, b) => Math.abs(a.left - b.left) < 1.5 && Math.abs(a.top - b.top
 function morphHome(info) {
   if (info.home === "reply" && info.thread && info.thread === screen.key) {
     // a forward goes back to Forward (the box is for the reply)
-    if (info.fwd) { const f = $("#qm-view .qm-endacts .qm-minibtn.qm-fwdbtn"); return f && f.offsetParent ? f : null; }
+    if (info.fwd) { const f = $("#qm-view .qm-endacts .qm-minibtn.qm-fwdbtn:not(.qm-leaving *)"); return f && f.offsetParent ? f : null; }
     const b = composerBox();
     if (b && b.offsetParent) return b;
-    const a = $("#qm-view .qm-endacts .qm-minibtn");
+    const a = $("#qm-view .qm-endacts .qm-minibtn:not(.qm-leaving *)");
     if (a && a.offsetParent) return a;
   }
   // (the + button is out of sight while a window is open: it's where this one goes back to)
@@ -5137,16 +5562,16 @@ function morphClose(info) {
   shell.appendChild(info.face.node);
   const gone = () => shell.remove();
   if (!home) {
-    ended(shell.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(10px) scale(.97)" }], { duration: 180, easing: "ease", fill: "forwards" }), 180).then(gone);
+    ended(shell.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(10px) scale(.97)" }], { duration: 180 * slowMo(), easing: "ease", fill: "forwards" }), 180 * slowMo()).then(gone);
     return;
   }
   const t = boxOf(home), look = lookOf(home);
   const hf = faceOf(home);
   shell.appendChild(hf);
   const giveBack = standIn(home);
-  info.face.node.animate([{ opacity: 1 }, { opacity: 1, offset: 0.08 }, { opacity: 0, offset: 0.52 }, { opacity: 0 }], { duration: 380, fill: "forwards" });
-  hf.animate([{ opacity: 0 }, { opacity: 0, offset: 0.12 }, { opacity: 1, offset: 0.58 }, { opacity: 1 }], { duration: 380, fill: "forwards" });
-  ended(shell.animate(shapeFrames(info.rect, look0, t, look), { duration: 380, easing: EASE_IN_OUT, fill: "forwards" }), 380).then(() => {
+  info.face.node.animate([{ opacity: 1 }, { opacity: 1, offset: 0.08 }, { opacity: 0, offset: 0.52 }, { opacity: 0 }], { duration: 380 * slowMo(), fill: "forwards" });
+  hf.animate([{ opacity: 0 }, { opacity: 0, offset: 0.12 }, { opacity: 1, offset: 0.58 }, { opacity: 1 }], { duration: 380 * slowMo(), fill: "forwards" });
+  ended(shell.animate(shapeFrames(info.rect, look0, t, look), { duration: 380 * slowMo(), easing: EASE_IN_OUT, fill: "forwards" }), 380 * slowMo()).then(() => {
     giveBack();
     gone();
   });
@@ -5385,7 +5810,7 @@ function clampWindow(dlg, landing) {
    Idle, it's a plain box you can type into at once. As soon as you do, Gmail's own reply editor takes
    its place, in the same spot and look: Gmail's spelling and grammar, Smart Compose, formatting,
    attachments, drafts that save themselves, ⌘Enter to send. Enter is always a new line. */
-const composerBox = () => $("#qm-view .qm-cbox");
+const composerBox = () => $("#qm-view .qm-cbox:not(.qm-leaving *)");
 const composerOf = () => { const b = composerBox(); const slot = b && b.closest(".qm-cslot"); return slot ? slot.qm : null; };
 function autosize(c) {
   const ta = c.ta;
@@ -5394,7 +5819,7 @@ function autosize(c) {
 }
 function updateSend(c) {
   const ed = c.ip && $(".editable", c.ip);
-  const can = c.ip ? !!(ed && ownText(ed)) || $$(".dL", c.ip).length > 0 : !!c.ta.value.trim();
+  const can = c.ip ? hasContent(c.ip) : !!c.ta.value.trim();
   // the placeholder only shows over a truly empty editor (not one holding a draft's blank lines)
   const bare = !c.ip || (ed && !ed.textContent.replace(/Press \/ for Help me write/i, "").trim() && $$("div, p", ed).length <= 1 && $$("br", ed).length <= 1);
   c.root.classList.toggle("qm-edempty", !!bare);
@@ -5472,7 +5897,9 @@ function attachBar(c, ip) {
   // whatever was typed into the box while Gmail's editor was on its way moves over
   const typed = c.ta.value;
   const hadFocus = document.activeElement === c.ta;
+  const inIt = ip.contains(document.activeElement); // (you're writing in it already: the caret stays where it is)
   if (typed.trim()) { c.ta.value = ""; autosize(c); typeInto(ed, typed); }
+  else if (inIt) { /* as it is */ }
   else if (c.wantFocus || hadFocus) focusEnd(ed);
   else {
     // opened ahead of time: keep the keyboard for shortcuts until you click in
@@ -5521,6 +5948,7 @@ function goLive(c, focus, how) {
   if (c.goingLive) return c.goingLive;
   c.goingLive = (async () => {
     await settlePeek();
+    if (lookBusy()) await afterLook(); // (Gmail's reply is this conversation's again first)
     let found = builtDraft();
     if (!found) {
       let narrow = false;
@@ -5543,7 +5971,7 @@ function goLive(c, focus, how) {
 }
 // while Gmail's editor is on its way it grabs focus; keep typing in the box until the hand-over
 document.addEventListener("focusin", (e) => {
-  const c = composerOf();
+  const c = enabled ? composerOf() : null;
   if (!c) return;
   const t = e.target;
   // Gmail focusing the editor it just opened in the background (not you): give the keyboard back
@@ -5620,6 +6048,23 @@ const othersOf = (t) => {
   if (!out.length) { const last = t.messages[t.messages.length - 1]; for (const x of (last && last.to) || []) add(x.email, x.name); }
   return out;
 };
+/* who the reply in the box really goes to: the people on Gmail's reply once it's open (Reply narrows it to the last
+   sender, Reply all keeps everyone), else everyone who wrote */
+function replyNames(c, t) {
+  if (c && c.ip && c.ip.isConnected) {
+    const me = accountEmail(), seen = new Set(), out = [];
+    for (const e of $$("[email]", c.ip)) {
+      if (e.closest(".editable, .gmail_quote")) continue;
+      const em = (e.getAttribute("email") || "").toLowerCase();
+      if (!em || em === me || seen.has(em)) continue;
+      seen.add(em);
+      const n = personName(em, e.getAttribute("name") || "").split(/\s+/)[0] || em;
+      if (!out.includes(n)) out.push(n);
+    }
+    if (out.length) return out;
+  }
+  return othersOf(t);
+}
 // how many people besides you the newest email is between (Reply all is there from two)
 function othersOn(t) {
   const last = t && t.messages[t.messages.length - 1];
@@ -5633,15 +6078,16 @@ function updateComposer(slot, t) {
   if (!c) { c = buildComposer(); slot.qm = c; slot.prepend(c.root); }
   c.t = t;
   if (c.tid !== t.id) { c.tid = t.id; c.wantIdeas = false; c.ideaFor = ""; toggleComposerAI(c, false); c.ta.value = ""; detachBar(c); }
-  const others = othersOf(t);
-  const ph = others.length ? "Reply to " + listNames(others) : "Reply";
-  if (c.ta.placeholder !== ph || c.ta.parentElement.getAttribute("data-ph") !== ph) { c.ta.placeholder = ph; c.ta.setAttribute("aria-label", ph); c.ta.parentElement.setAttribute("data-ph", ph); }
-  // Gmail's reply for this conversation (a saved draft, or one just opened) lives in the box
+  // Gmail's reply for this conversation (a saved draft, or one just opened) lives in the box, and the box says who
+  // it goes to
   if (!geminiBusy) {
     // keep the reply already in the box while it lasts (a forward opening alongside it isn't it)
     const ip = c.ip && c.ip.isConnected && $(".M9 .editable", c.ip) && !c.ip.dataset.qmFloat ? c.ip : builtDraft();
     if (ip) attachBar(c, ip); else if (c.ip) detachBar(c);
   }
+  const others = replyNames(c, t);
+  const ph = others.length ? "Reply to " + listNames(others.length > 4 ? [...others.slice(0, 3), others.length - 3 + " more"] : others) : "Reply";
+  if (c.ta.placeholder !== ph || c.ta.parentElement.getAttribute("data-ph") !== ph) { c.ta.placeholder = ph; c.ta.setAttribute("aria-label", ph); c.ta.parentElement.setAttribute("data-ph", ph); }
   autosize(c);
   updateSend(c);
   renderIdeas(c, t);
@@ -5669,11 +6115,11 @@ function sendComposer(c) {
   }
   const ed = $(".editable", c.ip);
   const body = ed ? ownText(ed) : "";
-  if (!body && !$$(".dL", c.ip).length) return;
+  if (!hasContent(c.ip)) return;
   const send = $(".T-I.aoO", c.ip) || $('[role="button"][data-tooltip^="Send" i]', c.ip);
   if (!send) { expandComposer(c).then((w) => { if (w) toast("Your reply is in a window now: ⌘Enter sends it."); }); return; }
   // (late at night, heated words, a missing file: asked first, only when one applies)
-  considerSend(c.ip, true, () => { notePending(t, body, $$(".dL", c.ip).map((d) => text($(".vI", d)) || "file"), sentFromBar(c)); press(send); });
+  considerSend(c.ip, true, () => { notePending(t, body, $$(".dL", c.ip).map((d) => text($(".vI", d)) || "file"), sentFromBar(c)); press(send); unlessSent(t, c.ip); });
 }
 const pendingSends = new Map(); // thread -> [{ text, files, n, at }]: your message shows at once
 function notePending(t, body, files, from) {
@@ -5701,19 +6147,42 @@ function noteBarSend(bar) {
   if (!c || !c.t || !bar.classList.contains("qm-bar")) return;
   const ed = $(".editable", bar);
   const body = ed ? ownText(ed) : "";
-  if (body || $$(".dL", bar).length) notePending(c.t, body, $$(".dL", bar).map((d) => text($(".vI", d)) || "file"), sentFromBar(c));
+  if (body || $$(".dL", bar).length) { notePending(c.t, body, $$(".dL", bar).map((d) => text($(".vI", d)) || "file"), sentFromBar(c)); unlessSent(c.t, bar); }
+}
+// (Gmail takes a reply it sends away, or empties it; still there with your words after a moment, it didn't go)
+function unlessSent(t, ip) {
+  const at = Date.now();
+  setTimeout(() => {
+    if (!ip.isConnected || !visible(ip) || !hasContent(ip)) return;
+    const list = (pendingSends.get(t.id) || []).filter((p) => p.at < at - 50 || p.at > at + 50);
+    if (list.length) pendingSends.set(t.id, list); else pendingSends.delete(t.id);
+    lastThreadSig = "";
+    invalidate(true);
+  }, 2600);
 }
 function pendingFor(t) {
   const list = (pendingSends.get(t.id) || []).filter((p) => t.messages.length <= p.n && Date.now() - p.at < 30000);
   if (list.length) pendingSends.set(t.id, list); else pendingSends.delete(t.id);
   return list;
 }
-async function attachFromPicker(c) {
-  const ip = c.ip || (await goLive(c, false));
-  const input = ip && $('input[type="file"][name="Filedata"]', ip);
-  if (input) input.click(); else toast("Couldn't attach here.");
+function attachFromPicker(c) {
+  const w = threadWindow();
+  const own = (w || c.ip) && $('input[type="file"][name="Filedata"]', w || c.ip);
+  if (own) { own.click(); return; }
+  // (Gmail's reply isn't open yet: Umbra's own picker, now, while it's still your click; the files go in once it is)
+  const input = h("input", { type: "file", multiple: true, hidden: true });
+  input.addEventListener("change", () => {
+    const files = Array.from(input.files || []);
+    input.remove();
+    if (files.length) attachToReply(files).then((ok) => { if (!ok) toast("Couldn't attach those."); });
+  }, { once: true });
+  window.addEventListener("focus", () => setTimeout(() => { if (input.isConnected && !(input.files && input.files.length)) input.remove(); }, 1500), { once: true });
+  document.body.appendChild(input);
+  input.click();
 }
 async function attachToReply(files) {
+  const w = threadWindow(); // (the reply is open in a window: there, not into a second reply)
+  if (w) return attachFiles(w, files);
   const c = composerOf();
   if (!c) return false;
   const ip = c.ip || (await goLive(c, true));
@@ -5723,7 +6192,7 @@ async function attachToReply(files) {
    computer, or Gmail's thumbnail), or the file's mark */
 const localFiles = new Map(); // file name -> object URL, for images added here (dropped, pasted or picked)
 function rememberLocal(files) {
-  for (const f of files) if (f && /^image\//.test(f.type) && f.size < 25 * 1048576 && !localFiles.has(f.name)) localFiles.set(f.name, URL.createObjectURL(f));
+  for (const f of files) if (f && /^image\//.test(f.type) && f.size < 25 * 1048576) { localFiles.delete(f.name); localFiles.set(f.name, URL.createObjectURL(f)); }
   // (the last few dozen: older ones are let go, their memory with them)
   while (localFiles.size > 30) { const [k, u] = localFiles.entries().next().value; localFiles.delete(k); URL.revokeObjectURL(u); }
 }
@@ -5752,13 +6221,16 @@ function attachFiles(win, files) {
   const input = $('input[type="file"][name="Filedata"]', win);
   if (!input || !files.length) return false;
   rememberLocal(files);
+  const before = $$(".dL, .dQ", win).length;
   try {
     const dt = new DataTransfer();
     for (const f of files) dt.items.add(f);
     input.files = dt.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    return true;
   } catch (e) { return false; }
+  // (Gmail shows a chip for each file it takes, or its own note for one too big, which goes as a Drive link)
+  until(() => !win.isConnected || $$(".dL, .dQ", win).length > before || popups().length, 6000, 100).then((ok) => { if (!ok && win.isConnected) toast(files.length === 1 ? "Gmail didn't take that file. The paperclip in the message can." : "Gmail didn't take those files. The paperclip in the message can."); });
+  return true;
 }
 function discardComposer(c) {
   if (c.ip) { const d = $('[aria-label^="Discard draft" i]', c.ip); if (d) press(d); }
@@ -5969,14 +6441,25 @@ const GMAIL_CANT = /^(pages|key|numbers|zip|rar|7z|gz|tgz|dmg|iso)$/;
 // Gmail's preview of a linked video sits among an email's files (a card with the video's title): it's the video's
 // card (videoCards), not a file to download
 const videoCard = (card) => !!(card && $('a[href*="youtube.com/"], a[href*="youtu.be/"]', card));
+/* what kind of file it is: by its name, or (a name without one) by what Gmail says it is */
+function kindOf(name, mime) {
+  const k = fileKind(name);
+  if (k !== "other" || !mime) return k;
+  return /^image\//.test(mime) ? "image" : /pdf/.test(mime) ? "pdf" : /^audio\//.test(mime) ? "audio" : /^video\//.test(mime) ? "video" : /^text\//.test(mime) ? "text" : k;
+}
 function attsOf(m) {
   return m.files.filter((f) => !videoCard(f.card)).map((f, i) => {
+    // the file's own address on Gmail (view=att, its attid): to see it, and to save it. Anything else isn't one, and
+    // then Gmail's own buttons on the card still work
     let view = "", get = "";
-    try { const u = new URL(f.url, location.origin); u.searchParams.set("disp", "inline"); view = u.toString(); u.searchParams.set("disp", "safe"); get = u.toString(); } catch (e) { /* no address: Gmail's own buttons still work */ }
-    const sizeEl = $$("*", f.card).find((e) => !e.children.length && /^\d[\d.,]*\s*(?:B|KB|MB|GB)$/i.test(e.textContent.trim()));
+    try {
+      const u = new URL(f.url, location.origin);
+      if (u.origin === location.origin && u.searchParams.get("view") === "att" && u.searchParams.has("attid")) { u.searchParams.set("disp", "inline"); view = u.toString(); u.searchParams.set("disp", "safe"); get = u.toString(); }
+    } catch (e) { /* no address */ }
+    const sizeEl = $$("*", f.card).find((e) => !e.children.length && /^\d[\d.,]*\s*(?:B|K|KB|M|MB|G|GB)$/i.test(e.textContent.trim()));
     const ext = fileExt(f);
-    return { key: (m.id || "m") + ":" + i, name: f.name, mime: f.mime, kind: fileKind(f.name), ext, size: sizeBytes(sizeEl ? sizeEl.textContent : ""),
-      view: /^https:\/\/mail\.google\.com\//.test(view) ? view : "", get: /^https:\/\/mail\.google\.com\//.test(get) ? get : "", thumb: f.thumb, preview: GMAIL_CANT.test(ext) ? "" : f.preview, card: f.card, here: true,
+    return { key: (m.id || "m") + ":" + i, name: f.name, mime: f.mime, kind: kindOf(f.name, f.mime), ext, size: sizeBytes(sizeEl ? sizeEl.textContent : ""),
+      view, get, thumb: f.thumb, preview: GMAIL_CANT.test(ext) ? "" : f.preview, card: f.card, here: true,
       from: { name: m.mine ? "You" : personName(m.email, m.name) || m.name || m.email || "", email: m.email || "", date: m.date || "" }, time: 0 };
   });
 }
@@ -6060,6 +6543,34 @@ function videoCards(m) {
   }
   return out.length ? [h("div", { class: "qm-videos" }, out)] : [];
 }
+/* a calendar invitation: Gmail's own "Going? Yes · Maybe · No" (drawn beside the email's words, not in them), answered
+   from here. The email's own Yes / Maybe / No links still open Calendar, as they always did. */
+const RSVP = [["Yes", /^(yes|sí|oui|ja|sì|sim|はい|是|예|да|evet)$/i], ["Maybe", /^(maybe|quizás|tal vez|peut-être|vielleicht|forse|talvez|未定|也许|미정|возможно|belki)$/i], ["No", /^(no|non|nein|não|いいえ|否|아니요|нет|hayır)$/i]];
+function rsvpButtons(m) {
+  const item = liveItem(m);
+  if (!item) return null;
+  const btns = $$('[role="button"], button', item).filter((b) => !b.closest(".a3s, .qm-rsvp") && b.childElementCount < 4 && text(b).length < 14 && visible(b));
+  const found = RSVP.map(([w, re]) => [w, btns.find((b) => re.test(text(b)) || re.test(b.getAttribute("aria-label") || ""))]).filter(([, b]) => b);
+  if (found.length < 2) return null;
+  // (only an invitation's: the answers sit together, in a card about going, or the email is an invitation)
+  let box = found[0][1];
+  for (let i = 0; i < 7 && box && !found.every(([, b]) => box.contains(b)); i++) box = box.parentElement;
+  if (!box || !found.every(([, b]) => box.contains(b))) return null;
+  const invite = /going\?|rsvp|invitation|calendar|attend/i.test(text(box)) || m.files.some((f) => /\.ics$/i.test(f.name) || /calendar/i.test(f.mime)) || !!(m.body && $('a[href*="calendar.google.com/calendar/event"], a[href*="calendar/event?action=RESPOND"]', m.body));
+  return invite ? found : null;
+}
+const rsvpOn = (b) => b.getAttribute("aria-pressed") === "true" || b.getAttribute("aria-checked") === "true" || b.getAttribute("aria-selected") === "true";
+const rsvpSig = (m) => { const f = rsvpButtons(m); return f ? f.map(([w, b]) => w + (rsvpOn(b) ? "+" : "")).join("") : ""; };
+function rsvpEl(m) {
+  const found = rsvpButtons(m);
+  if (!found) return null;
+  return h("div", { class: "qm-rsvp", role: "group", "aria-label": "Going?" }, h("span", { text: "Going?" }),
+    ...found.map(([w, b]) => h("button", { type: "button", "aria-pressed": String(rsvpOn(b)), onclick: () => {
+      const now = (rsvpButtons(m) || []).find(([x]) => x === w);
+      if (now && press(now[1])) { toast(w === "Yes" ? "You're going." : w === "No" ? "You said you're not going." : "You said maybe."); for (const ms of [600, 1600]) setTimeout(() => { lastThreadSig = ""; invalidate(true); }, ms); }
+      else toast("Gmail doesn't offer that just now.");
+    } }, w)));
+}
 /* Gmail held back an email's pictures ("Images are not displayed"): its own buttons to show them, here too */
 function hiddenPics(m) {
   const item = liveItem(m);
@@ -6069,8 +6580,12 @@ function hiddenPics(m) {
   if (!show) return null;
   const always = find(/^always display images from /i);
   return h("div", { class: "qm-picshidden" }, icon("image"), h("span", { text: "Pictures in this email are hidden." }),
-    h("button", { type: "button", onclick: () => { const b = find(/^display images below$/i); if (b) { press(b); setTimeout(() => { lastThreadSig = ""; invalidate(true); }, 400); } } }, "Show them"),
-    always ? h("button", { type: "button", onclick: () => { const b = find(/^always display images from /i); if (b) { press(b); setTimeout(() => { lastThreadSig = ""; invalidate(true); }, 400); } } }, "Always from this sender") : null);
+    h("button", { type: "button", onclick: () => { const b = find(/^display images below$/i); if (b) { press(b); picsShown(m); } } }, "Show them"),
+    always ? h("button", { type: "button", onclick: () => { const b = find(/^always display images from /i); if (b) { press(b); picsShown(m); } } }, "Always from this sender") : null);
+}
+// (Gmail puts the pictures in over a moment: the copy of that email is made again as they arrive)
+function picsShown(m) {
+  for (const ms of [400, 1200, 3000]) setTimeout(() => { bodyCache.delete(m.id); lastThreadSig = ""; invalidate(true); }, ms);
 }
 
 function bodyEl(m, entry, opts) {
@@ -6078,7 +6593,12 @@ function bodyEl(m, entry, opts) {
   node.classList.toggle("qm-showall", !!opts.showAll);
   node.classList.toggle("qm-chat", !!opts.chat); // in a conversation, earlier messages quoted below fold away
   const parts = [];
-  if (entry.rich) parts.push(h("div", { class: "qm-rich-wrap" }, h("div", { class: "qm-rich" + (prefs.darken && !isLight() ? " qm-dark" : "") }, node)));
+  if (entry.rich) {
+    // (dark already: shown as it is, its own background running out to the edges)
+    const wrap = h("div", { class: "qm-rich-wrap" + (entry.dark ? " qm-ownbg" : "") }, h("div", { class: "qm-rich" + (prefs.darken && !isLight() && !entry.dark ? " qm-dark" : "") }, node));
+    if (entry.dark) { wrap.style.background = "rgb(" + entry.dark + ")"; wrap.firstChild.style.background = "rgb(" + entry.dark + ")"; }
+    parts.push(wrap);
+  }
   else parts.push(node);
   // Gmail cuts very long emails short: the rest comes in right here
   if (entry.clipped) { const btn = h("button", { type: "button", class: "qm-clipped", onclick: () => loadWhole(m, btn) }, "Show the whole message"); parts.push(btn); }
@@ -6092,16 +6612,19 @@ async function loadWhole(m, btn) {
   btn.disabled = true;
   btn.textContent = "Loading the rest…";
   try {
+    const h2 = $("h2.hP", gmailMain() || document);
+    const perm = h2 && (h2.getAttribute("data-thread-perm-id") || "");
+    if (perm) notePerm(tid, perm);
     const doc = parseHTML(await getText(printPath(accountIndex(), tid)));
     const norm = (x) => x.replace(/\s+/g, " ").trim().slice(0, 160);
-    const want = norm(m.body.textContent).slice(0, 80);
+    const want = norm(plainText(m.body)).slice(0, 80);
     const cells = doc ? $$("table.message", doc.body).map((t) => { const rows = $$(":scope > tbody > tr", t); return rows[rows.length - 1]; }).filter(Boolean) : [];
     // (the print view lists the emails in the conversation's order: of those that start the same way, the one
     // in this email's place, so a second "Hi Ann, thanks…" isn't mistaken for the first)
     const main = gmailMain();
     const msgs = main && $("h2.hP", main) ? readThread(main).messages : [];
     const at = msgs.findIndex((x) => x.id === m.id);
-    const hits = cells.map((c, i) => [c, i]).filter(([c]) => want && norm(c.textContent).includes(want.slice(0, 50)));
+    const hits = cells.map((c, i) => [c, i]).filter(([c]) => want && norm(plainText(c)).includes(want.slice(0, 50)));
     const near = (i) => (at < 0 ? i : Math.abs(i - at - (cells.length - msgs.length)));
     const cell = hits.length ? hits.sort((a, b) => near(a[1]) - near(b[1]))[0][0] : cells.length === 1 ? cells[0] : null;
     if (!cell) throw new Error("not found");
@@ -6125,19 +6648,38 @@ async function loadWhole(m, btn) {
 
 /* ---- conversation & reading screens: built once, then only their insides change ---- */
 const sumAsked = new Set();
+let emptyThread = null, expandTry = null;
+/* Gmail's view of a conversation has something in it to look at (a message Umbra couldn't read), not only its frame */
+const gmailDrewMessages = (main) => !!main && $$('[role="listitem"], .adn, .a3s', main).some((x) => visible(x) && x.getBoundingClientRect().height > 24);
 function renderThread(r) {
   const t = readThread(r.main);
-  if (!t.messages.length) return;
+  if (!t.messages.length) {
+    // nothing of it Umbra can read (yet): a moment's wait, never a spinner that stays. Then, if Gmail drew something
+    // Umbra can't read, Gmail's own view of it; if Gmail drew nothing (it couldn't load it), Umbra says so, with Back
+    // and Try again. (In a tab in the background Gmail can simply be slow: the wait starts once you're looking.)
+    if (!emptyThread || emptyThread.hash !== r.hash || document.hidden) emptyThread = { hash: r.hash, at: Date.now() };
+    if (document.hidden) return;
+    if (Date.now() - emptyThread.at > 3000) {
+      if (gmailDrewMessages(r.main)) { hideView(); ROOT.classList.add("qm-gmailpage"); }
+      else { ROOT.classList.remove("qm-gmailpage"); renderLost(r.hash, true); }
+    } else setTimeout(() => invalidate(), 3100);
+    return;
+  }
+  emptyThread = null;
   readingFrom = ((t.messages.find((m) => !m.mine && m.email) || {}).email || "").toLowerCase();
-  if (t.id && !readHere.has(String(t.id))) noteRead(t.id, Date.now());
+  if (t.id && !readHere.has(String(t.id)) && !markedUnread.has(String(t.id))) noteRead(t.id, Date.now());
   // open every message: when the conversation is opened, and again whenever its messages change (Gmail folds the
   // earlier ones again after you send, or undo a send)
+  // (Gmail may not have drawn its Expand all yet: looked for again as it does, for a few seconds)
   const expKey = t.id + ":" + t.messages.length;
   if (prefs.expand && t.id && expandedFor !== expKey) {
     const collapsed = t.messages.some((m) => m.collapsed) || !!t.older;
-    const btn = $('[aria-label="Expand all" i], [data-tooltip="Expand all" i]', r.main);
-    expandedFor = expKey;
-    if (collapsed && btn && t.messages.length <= 30) press(btn);
+    const btn = collapsed ? $$('[aria-label="Expand all" i], [data-tooltip="Expand all" i]', r.main).find(visible) || $('[aria-label="Expand all" i], [data-tooltip="Expand all" i]', r.main) : null;
+    if (!collapsed || t.messages.length > 80) expandedFor = expKey;
+    else if (btn) { expandedFor = expKey; press(btn); }
+    else if (!expandTry || expandTry.key !== expKey) { expandTry = { key: expKey, at: Date.now() }; setTimeout(() => invalidate(), 600); }
+    else if (Date.now() - expandTry.at > 4000) expandedFor = expKey;
+    else setTimeout(() => invalidate(), 600);
   }
   const reading = t.messages.length === 1;
   const { el, fresh } = setScreen(reading ? "reading" : "thread", t.id, () => (reading
@@ -6156,13 +6698,16 @@ function renderThread(r) {
   const sum = gline && (reading ? long || !!gm.action : !canSum || prefs.summaries !== "auto")
     ? (reading ? { points: [gline], gem: true } : { summary: (t.messages.length > 1 ? "Latest: " : "") + gline, gem: true })
     : canSum ? (prefs.summaries === "auto" || aiCache.has(sumKey) || sumAsked.has(sumKey) ? ask(sumKey, { kind: reading ? "points" : "thread", subject: t.subject, text: threadText(t) }, invalidate) : "offer") : null;
+  // (asked, and it failed: why, and a way to try again)
+  const sumShown = sum === null && canSum && failedAI.has(sumKey) && Date.now() - failedAI.get(sumKey) < 5 * 60 * 1000 ? { failed: aiWhy.get(sumKey) || "the AI didn't answer" } : sum;
   const pend = pendingFor(t);
-  const sig = [t.id, t.messages.map((m) => m.id + (m.collapsed ? "c" : "e") + (m.body ? cloneBody(m).sig : "") + m.files.map((f) => (f.thumb ? 1 : f.preview ? 2 : 0)).join("") + (showAll.has(m.id) ? "s" : "") + m.reacts.map((x) => x.emoji + x.count + (x.mine ? 1 : 0)).join("") + (pendingReact.has(m.id) ? "p" : "")).join("|"),
-    sum === undefined ? "w" : sum === "offer" ? "o" : sum ? "y" + (sum.gem ? "g" : "") : "n", prefs.darken, isLight(), prefs.avatars, !!t.older, pend.length, Object.keys(contacts).length].join("#");
+  const sig = [t.id, t.messages.map((m) => m.id + (m.collapsed ? "c" : "e") + (m.body ? cloneBody(m).sig : "") + m.files.map((f) => (f.thumb ? 1 : f.preview ? 2 : 0) + hashString(f.thumb + f.preview + f.url)).join("") + (showAll.has(m.id) ? "s" : "") + m.reacts.map((x) => x.emoji + x.count + (x.mine ? 1 : 0)).join("") + (pendingReact.has(m.id) ? "p" : "")).join("|"),
+    sumShown && sumShown.failed ? "f" : sum === undefined ? "w" : sum === "offer" ? "o" : sum ? "y" + (sum.gem ? "g" : "") + hashString(String(sum.summary || (sum.points || []).join("|"))) : "n", prefs.darken, isLight(), prefs.avatars, !!t.older, pend.length, Object.keys(contacts).length,
+    t.labels.join(","), threadStarred(), !!t.unsub, text(scheduledLine(r.main)), t.messages.map((m) => (readerOn.has(m.id) ? 1 : 0) + rsvpSig(m)).join("")].join("#");
   if (fresh || sig !== lastThreadSig) {
     lastThreadSig = sig;
-    if (reading) renderReading(el, t, sum, sumKey);
-    else renderConvo(el, t, sum, sumKey, fresh, pend);
+    if (reading) renderReading(el, t, sumShown, sumKey);
+    else renderConvo(el, t, sumShown, sumKey, fresh, pend);
   }
   const slot = $(".qm-cslot", el);
   // how tall the message box is: the conversation leaves that much room and fades out behind it
@@ -6175,7 +6720,9 @@ function renderThread(r) {
   // into it and the box takes your next click at once; an empty one goes back to Reply, where it came from)
   const inWindow = $$('.nH.Hd[role="dialog"]').some((d) => d.dataset.qmThread === screen.key && !d.dataset.qmFwd && visible(d) && !isMinimized(d) && !minimizing.has(d) && !d.dataset.qmMin && hasContent(d));
   const drafting = (!!pdEd && hasContent(pd)) || !!(slot.qm && slot.qm.ta.value.trim()) || inWindow;
-  const full = drafting || (!barFolded.has(t.id) && barOpened.has(t.id));
+  // (a reply or forward on its way into a window: the screen stays as it was meanwhile, not the bar for a moment while
+  // Gmail's reply exists, out of sight, before it becomes the window)
+  const full = replyOpening ? !slot.hidden : drafting || (!barFolded.has(t.id) && barOpened.has(t.id));
   slot.hidden = !full;
   slot.classList.toggle("qm-mini-on", !full);
   const host = $(reading ? ".qm-article" : ".qm-convo-in", el);
@@ -6213,13 +6760,13 @@ function renderThread(r) {
     c.ta.focus();
     // Reply (not Reply all) to a conversation with several people: the reply is switched to just the sender
     // (and Reply all after that: everyone again)
-    goLive(c, true, how).then((ip) => { if (ip && (how === "reply" || (how === "all" && ip.dataset.qmHow === "reply"))) replyAs(ip, how).then((ok) => { if (!ok && how === "all") toast("Couldn't switch this to Reply all. Gmail's reply menu (the arrow by the recipients) can."); const ed = $(".editable", ip); if (ed) focusEnd(ed); }); });
+    goLive(c, true, how).then((ip) => { if (ip && (how === "reply" || (how === "all" && (ip.dataset.qmHow === "reply" || narrowed(ip))))) replyAs(ip, how).then((ok) => { if (!ok && how === "all") toast("Couldn't switch this to Reply all. Gmail's reply menu (the arrow by the recipients) can."); const ed = $(".editable", ip); if (ed) focusEnd(ed); }); });
   }
 }
 const barOpened = new Set(), barFolded = new Set();
 let barOpenedAt = 0;
 // (Gmail's own editor sits in the bar but isn't inside it: a click elsewhere, or esc, is watched for page-wide)
-const barSlot = () => { const sl = $("#qm-view .qm-cslot"); return sl && sl.qmAside && !sl.hidden ? sl : null; };
+const barSlot = () => { if (!enabled) return null; const sl = $("#qm-view .qm-cslot:not(.qm-leaving *)"); return sl && sl.qmAside && !sl.hidden ? sl : null; };
 document.addEventListener("pointerdown", (e) => { const sl = barSlot(); if (sl && !sl.contains(e.target) && !(sl.qm && sl.qm.ip && sl.qm.ip.contains(e.target))) sl.qmAside(); }, true);
 document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; const sl = barSlot(); if (sl) sl.qmAside(); }, true);
 let barFocus = "", barHow = "";
@@ -6274,7 +6821,12 @@ function myName() {
 function summaryEl(sum, sumKey, cls) {
   if (sum === "offer") return h("button", { type: "button", class: "qm-sumask", onclick: () => { sumAsked.add(sumKey); invalidate(true); } }, "Summarize");
   if (sum === undefined) return h("div", { class: cls + " qm-wait" }, h("p", { text: "Summarizing…" }));
-  if (!sum || sum.failed || !sum.summary) return null;
+  if (sum && sum.failed) {
+    const box = h("div", { class: cls + " qm-wait" }, h("p", { text: "Couldn't summarize: " + String(sum.failed).replace(/\.?$/, ".") }),
+      h("button", { type: "button", class: "qm-sumask", onclick: () => { failedAI.delete(sumKey); aiWhy.delete(sumKey); sumAsked.add(sumKey); lastThreadSig = ""; invalidate(true); } }, "Try again"));
+    return box;
+  }
+  if (!sum || !sum.summary) return null;
   const box = h("div", { class: cls }, h("p", { text: sum.summary }),
     h("button", { type: "button", class: "qm-x", "aria-label": "Dismiss", onclick: () => { dismiss(sumKey); box.remove(); } }, icon("x")));
   return box;
@@ -6294,13 +6846,14 @@ function renderConvo(el, t, sum, sumKey, fresh, pend) {
   const more = (senders.length || sentTo.length) - 1;
   const sub = h("div", { class: "qm-hsub" },
     lead ? h("span", {}, sentTo.length ? "To " : "", whoButton(lead, "", lead), more > 0 ? h("span", { class: "qm-hmore", title: (senders.length ? senders : sentTo).slice(1).join(", "), text: " +" + more }) : null) : null,
-    ...t.labels.map((l) => h("span", { class: "qm-label", text: l })));
+    ...t.labels.map((l) => h("span", { class: "qm-label", text: l })), starMark());
   const old = $(".qm-head .qm-hsub", el);
   if (old) old.replaceWith(sub); else $(".qm-head h1", el).after(sub);
   const oldSched = $(".qm-head .qm-sched", el), sched = scheduledLine(gmailMain());
   if (oldSched) oldSched.remove();
   if (sched) sub.after(sched);
-  $(".qm-sumslot", el).replaceChildren(...[summaryEl(sum, sumKey, "qm-sum")].filter(Boolean));
+  const sumSlot = $(".qm-sumslot", el), sumSig = sumKey + "|" + (sum === undefined ? "w" : sum === "offer" ? "o" : sum && sum.failed ? "f" : sum && sum.summary ? hashString(sum.summary) : "");
+  if (sumSlot.dataset.sig !== sumSig) { sumSlot.dataset.sig = sumSig; sumSlot.replaceChildren(...[summaryEl(sum, sumKey, "qm-sum")].filter(Boolean)); }
   const parts = [];
   if (t.older) parts.push(h("button", { type: "button", class: "qm-older", onclick: () => press(t.older) }, text(t.older) || "Earlier messages"));
   // new since you were last here (worked out once, as it opens): the first of them is where you start
@@ -6308,17 +6861,26 @@ function renderConvo(el, t, sum, sumKey, fresh, pend) {
   if (fresh || !catchFor || catchFor.tid !== t.id) catchFor = { tid: t.id, info: newSince(t), at: Date.now(), shown: false };
   else if (!catchFor.info && Date.now() - catchFor.at < 3000) catchFor.info = newSince(t);
   const cu = catchFor.info;
-  const freshFrom = cu ? t.messages.indexOf(cu.first) : -1;
+  const freshFrom = cu ? t.messages.findIndex((m) => m.id === cu.first.id) : -1;
   let prev = null;
+  const kept = inner.qmMsgs || new Map(), now = new Map();
   t.messages.forEach((m, i) => {
     if (cu && i === freshFrom) parts.push(catchUpEl(t, cu));
-    parts.push(messageEl(m, prev, cu && freshFrom >= 0 && i >= freshFrom && !m.mine));
+    const isNew = !!(cu && freshFrom >= 0 && i >= freshFrom && !m.mine);
+    const k = msgSig(m, prev, isNew);
+    const hit = m.id && kept.get(m.id);
+    const el = hit && hit.sig === k ? hit.el : messageEl(m, prev, isNew);
+    if (m.id) now.set(m.id, { sig: k, el });
+    parts.push(el);
     prev = m;
   });
+  inner.qmMsgs = now;
   markSeen(t);
   for (const p of pend) parts.push(h("div", { class: "qm-msg qm-mine qm-sending" }, h("div", { class: "qm-meta" }, h("span", { text: "Sending…" })),
     h("div", { class: "qm-bubble" }, ...p.text.split("\n").map((line) => h("div", { text: line || " " })), p.files.length ? h("div", { class: "qm-sendfiles", text: p.files.join(", ") }) : null)));
-  inner.replaceChildren(...parts);
+  // (in place: only what's new goes in, only what's gone comes out)
+  parts.forEach((p, i) => { if (inner.children[i] !== p) inner.insertBefore(p, inner.children[i] || null); });
+  while (inner.children.length > parts.length) inner.lastElementChild.remove();
   requestAnimationFrame(() => {
     const startAt = cu && !catchFor.shown ? $(".qm-catchup", inner) : null;
     if (startAt) { convo.scrollTop = Math.max(0, startAt.offsetTop - 104); catchFor.shown = true; } // (clear of the title floating over the top)
@@ -6329,6 +6891,13 @@ function renderConvo(el, t, sum, sumKey, fresh, pend) {
     const sending = $$(".qm-msg.qm-sending", inner);
     pend.forEach((p, i) => { if (!p.flown && sending[i]) { p.flown = true; if (p.from && Date.now() - p.at < 2000) sendGlide($(".qm-bubble", sending[i]), p.from); else play(sending[i], [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { spring: "gentle" }); } });
   });
+}
+/* everything a message's look depends on: the same, and it's the same element as before */
+function msgSig(m, prev, fresh) {
+  const c = contacts[m.email] || {};
+  return [m.id, m.collapsed ? "c" : "e", m.body && !m.collapsed ? cloneBody(m).sig : (m.snippet || "").length, m.date, m.name, c.name || "", c.img || "", c.emoji || "", c.color || "", m.mine ? 1 : 0,
+    m.files.map((f) => hashString(f.name + f.thumb + f.preview + f.url)).join(""), showAll.has(m.id) ? 1 : 0, readerOn.has(m.id) ? 1 : 0, m.reacts.map((x) => x.emoji + x.count + (x.mine ? 1 : 0)).join(""),
+    pendingReact.has(m.id) ? pendingReact.get(m.id).emoji : "", fresh ? 1 : 0, prev ? prev.email + (prev.collapsed ? "c" : "") : "", prefs.avatars ? 1 : 0, prefs.darken ? 1 : 0, isLight() ? 1 : 0, !!$('button[aria-label="Add reaction" i]', m.item) ? 1 : 0, rsvpSig(m)].join("|");
 }
 function messageEl(m, prev, fresh) {
   const msg = h("div", { class: "qm-msg" + (m.mine ? " qm-mine" : "") + (fresh ? " qm-newmsg" : ""), "data-mid": m.id || null });
@@ -6363,7 +6932,7 @@ function messageEl(m, prev, fresh) {
   if (entry.rich) meta.appendChild(readerButton(m));
   const asReader = entry.rich && readerOn.has(m.id);
   if (entry.rich && !asReader) msg.classList.add("qm-wide");
-  const bubble = h("div", { class: entry.rich && !asReader ? "" : "qm-bubble" }, hiddenPics(m), asReader ? readerOf(entry.node) : bodyEl(m, entry, { showAll: showAll.has(m.id), chat: true }));
+  const bubble = h("div", { class: entry.rich && !asReader ? "" : "qm-bubble" }, hiddenPics(m), rsvpEl(m), asReader ? readerOf(entry.node) : bodyEl(m, entry, { showAll: showAll.has(m.id), chat: true }));
   if (entry.hasMore && !entry.rich) bubble.appendChild(h("button", { type: "button", class: "qm-more", "aria-label": "Show quoted text", title: "Show quoted text", onclick: () => toggleQuoted(m) }, "•••"));
   bubble.append(...fileChips(m), ...videoCards(m));
   const acts = h("div", { class: "qm-acts" });
@@ -6399,6 +6968,7 @@ function renderReading(el, t, sum, sumKey) {
     m.mine || !m.email ? h("span", { text: name + (m.date ? " · " + m.date : "") })
       : h("span", {}, whoButton(m.email, name), m.date ? " · " + m.date : ""),
     ...t.labels.map((l) => h("span", { class: "qm-label", text: l })),
+    starMark(),
     trackerChip(entry),
     entry && entry.rich ? readerButton(m) : null,
     t.unsub ? h("button", { type: "button", class: "qm-unsub", onclick: () => press(t.unsub) }, "Unsubscribe") : null));
@@ -6406,7 +6976,7 @@ function renderReading(el, t, sum, sumKey) {
   const sched = scheduledLine(gmailMain());
   if (sched) art.appendChild(sched);
   const points = h("div", { class: "qm-points" });
-  if (sum === "offer" || sum === undefined) points.appendChild(summaryEl(sum, sumKey, "qm-point"));
+  if (sum === "offer" || sum === undefined || (sum && sum.failed)) points.appendChild(summaryEl(sum, sumKey, "qm-point"));
   else if (sum && Array.isArray(sum.points) && sum.points.length) {
     sum.points.slice(0, 2).forEach((s, i) => {
       const k = sumKey + ":" + i;
@@ -6419,10 +6989,13 @@ function renderReading(el, t, sum, sumKey) {
   art.appendChild(points);
   const hidden = hiddenPics(m);
   if (hidden) art.appendChild(hidden);
+  const rsvp = rsvpEl(m);
+  if (rsvp) art.appendChild(rsvp);
   if (entry && entry.rich && readerOn.has(m.id)) art.appendChild(readerOf(entry.node));
   else if (entry) {
     const content = bodyEl(m, entry, { showAll: showAll.has(m.id) });
     art.appendChild(entry.rich ? h("div", {}, content) : h("div", { class: "qm-plainbody" }, content));
+    if (entry.hasMore && !entry.rich && entry.node.querySelector(".adL, .ajR")) art.appendChild(h("button", { type: "button", class: "qm-more", "aria-label": showAll.has(m.id) ? "Hide the rest" : "Show the rest", title: showAll.has(m.id) ? "Hide the rest" : "Show the rest", onclick: () => toggleQuoted(m) }, "•••"));
   }
   art.append(...fileChips(m), ...videoCards(m));
   const reacts = reactsEl(m);
@@ -6542,7 +7115,11 @@ function decorateWriting() {
     if (!dlg.dataset.qmSeen && !morph) { dlg.dataset.qmSeen = "1"; dlg.classList.add("qm-new"); setTimeout(() => dlg.classList.remove("qm-new"), 400); }
     // (only once this page knows it's the account the message is moving to: a window that opened before that
     // would otherwise be passed over, and the message never put in)
-    if (!dlg.dataset.qmThread && !dlg.dataset.qmFilled) { const md = store.get("moving-draft", null); if (md && md.toAcct === accountEmail()) { dlg.dataset.qmFilled = "1"; fillMovedDraft(dlg); } }
+    if (!dlg.dataset.qmThread && !dlg.dataset.qmFilled) {
+      const md = store.get("moving-draft", null), lc = linkCompose();
+      if (md && md.toAcct === accountEmail()) { dlg.dataset.qmFilled = "1"; fillMovedDraft(dlg); }
+      else if (lc) { dlg.dataset.qmFilled = "1"; session.set("link-compose", ""); fillLinked(dlg, lc); }
+    }
     let head = $(":scope > .qm-whead", dlg);
     const gTitle = text($(".aYF", dlg)) || "New message";
     if (!head) {
@@ -6556,7 +7133,7 @@ function decorateWriting() {
         ib("x", "Close and keep draft", () => closeWindow(dlg), "qm-s"));
       dlg.prepend(head);
       makeDraggable(head, dlg);
-      dlg.qmRo = new ResizeObserver(() => { if (dlg.closest(".aSt")) fitFull(dlg); else { fitWindow(dlg); clampWindow(dlg); } });
+      dlg.qmRo = new ResizeObserver(() => { if (!enabled) return; if (dlg.closest(".aSt")) fitFull(dlg); else { fitWindow(dlg); clampWindow(dlg); } });
       dlg.qmRo.observe(dlg);
       head.addEventListener("dblclick", (e) => { if (!e.target.closest("button")) minimizeWindow(dlg); });
     }
@@ -6633,6 +7210,92 @@ async function moveDraft(dlg, a) {
   else press(gmailBtn(dlg, "button.Ha, [aria-label^='Save & close' i]"));
   leaveTo(`/mail/u/${a.index}/#inbox?compose=new`, { list: "#inbox" }, () => previewList(a, "#inbox"));
 }
+/* a message a link asked for (Gmail's full-page "new message", already addressed), which the page it opened in
+   handed to this one: for this account, from the last minute or two */
+function linkCompose() {
+  let d = null;
+  try { d = JSON.parse(session.get("link-compose") || "null"); } catch (e) { d = null; }
+  if (!d || !d.link || Date.now() - d.at > 2 * 60 * 1000) return null;
+  if (d.email ? accountEmail() && d.email !== accountEmail() : d.u != null && d.u !== accountIndex()) return null;
+  return d;
+}
+/* the window Gmail opened for it: filled in out of sight, then out it comes */
+async function fillLinked(dlg, d) {
+  dlg.dataset.qmGone = "1";
+  try { await fillWindow(dlg, d, true); } finally {
+    if (dlg.isConnected) { delete dlg.dataset.qmGone; unframe(dlg); reveal(dlg, null); }
+  }
+}
+/* a new message, already addressed (a mailto: link in an email, a link to Gmail's full-page new message, a person's
+   card): the window opens with it all filled in. d: { to, cc, bcc, subject, text } */
+function composeTo(d) {
+  return compose(Object.assign({ to: [], cc: [], bcc: [], subject: "", text: "" }, d));
+}
+/* in an email (or anywhere in Umbra), a link that writes to someone opens a window here, as Gmail's own would */
+document.addEventListener("click", (e) => {
+  if (!enabled || !e.isTrusted || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const a = e.target && e.target.closest && e.target.closest("a[href]");
+  if (!a || !a.closest('[id^="qm-"]') || a.closest('.nH.Hd[role="dialog"], .ip')) return;
+  const d = composeLink(a.href || a.getAttribute("href"));
+  if (!d || wp().linkCompose === false) return;
+  if (d.email ? d.email !== accountEmail() : d.u != null && d.u !== accountIndex()) return; // (another account's: its own page)
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  hideLink();
+  composeTo(d);
+}, true);
+/* puts who it's to, the subject and the words into a new message's window, as typing would. With `place`, the
+   cursor then goes where you'd start: who it's to, else the subject, else the end of the words. */
+async function fillWindow(dlg, d, place) {
+  if (!(await until(() => $("input[name='subjectbox']", dlg) && $(".editable", dlg), 8000, 50))) return false;
+  const findIn = (re) => $$("input", dlg).find((i) => re.test(i.getAttribute("aria-label") || "") && visible(i));
+  // Gmail folds the recipient lines into one "Recipients" line while you're elsewhere: open it
+  if (!findIn(/^to recipients/i)) { const row = $$(".aoD.hl", dlg).find(visible); if (row) { row.focus(); if (!(await until(() => findIn(/^to recipients/i), 600, 30))) press(row); } await until(() => findIn(/^to recipients/i), 1500, 40); }
+  const put = async (re, list, label) => {
+    if (!list || !list.length) return;
+    let inp = findIn(re);
+    if (!inp && label) {
+      const t = $$('[role="link"], span', dlg).find((x) => label.test(text(x)) && !x.closest(".qm-whead") && visible(x));
+      if (t) press(t);
+      inp = await until(() => findIn(re), 1500, 40);
+    }
+    if (!inp) return;
+    inp.focus();
+    document.execCommand("insertText", false, list.join(", ") + ", ");
+    await wait(120);
+  };
+  await put(/^to recipients/i, d.to);
+  await put(/^cc recipients/i, d.cc, /^cc$/i);
+  await put(/^bcc recipients/i, d.bcc, /^bcc$/i);
+  const subj = $("input[name='subjectbox']", dlg);
+  if (subj && d.subject) { subj.focus(); document.execCommand("selectAll"); document.execCommand("insertText", false, d.subject); }
+  // the words go in as typing would (Gmail allows no pasted-in HTML from scripts)
+  const ed = $(".editable", dlg);
+  if (ed && d.text) {
+    ed.focus();
+    const sel = window.getSelection(), range = document.createRange();
+    range.setStart(ed, 0);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    d.text.replace(/\r/g, "").split("\n").forEach((line, i) => { if (i) document.execCommand("insertParagraph"); if (line) document.execCommand("insertText", false, line); });
+  }
+  if (place) {
+    const to = findIn(/^to recipients/i);
+    if (!(d.to || []).length && !(d.cc || []).length && !(d.bcc || []).length && to) to.focus();
+    else if (!d.subject && subj) subj.focus();
+    else if (ed && !d.text) {
+      // at the start of the message (above your signature), as Gmail puts it
+      ed.focus();
+      const sel = window.getSelection(), range = document.createRange();
+      range.setStart(ed, 0);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else if (ed) ed.focus(); // (just after the words that came with it)
+  }
+  return true;
+}
 /* here, the message that moved from another account goes into the new message Gmail opened */
 let moveFilling = false;
 async function fillMovedDraft(dlg) {
@@ -6642,39 +7305,7 @@ async function fillMovedDraft(dlg) {
   dlg.dataset.qmGone = "1"; // filled in out of sight (the stand-in shows the message meanwhile)
   movingCard(d);
   try {
-    if (!(await until(() => $("input[name='subjectbox']", dlg) && $(".editable", dlg), 6000, 50))) return;
-    const findIn = (re) => $$("input", dlg).find((i) => re.test(i.getAttribute("aria-label") || "") && visible(i));
-    // Gmail folds the recipient lines into one "Recipients" line while you're elsewhere: open it
-    if (!findIn(/^to recipients/i)) { const row = $$(".aoD.hl", dlg).find(visible); if (row) { row.focus(); if (!(await until(() => findIn(/^to recipients/i), 600, 30))) press(row); } await until(() => findIn(/^to recipients/i), 1500, 40); }
-    const put = async (re, list, label) => {
-      if (!list || !list.length) return;
-      let inp = findIn(re);
-      if (!inp && label) {
-        const t = $$('[role="link"], span', dlg).find((x) => label.test(text(x)) && !x.closest(".qm-whead") && visible(x));
-        if (t) press(t);
-        inp = await until(() => findIn(re), 1500, 40);
-      }
-      if (!inp) return;
-      inp.focus();
-      document.execCommand("insertText", false, list.join(", ") + ", ");
-      await wait(120);
-    };
-    await put(/^to recipients/i, d.to);
-    await put(/^cc recipients/i, d.cc, /^cc$/i);
-    await put(/^bcc recipients/i, d.bcc, /^bcc$/i);
-    const subj = $("input[name='subjectbox']", dlg);
-    if (subj && d.subject) { subj.focus(); document.execCommand("selectAll"); document.execCommand("insertText", false, d.subject); }
-    // the words go in as typing would (Gmail allows no pasted-in HTML from scripts)
-    const ed = $(".editable", dlg);
-    if (ed && d.text) {
-      ed.focus();
-      const sel = window.getSelection(), range = document.createRange();
-      range.setStart(ed, 0);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      d.text.replace(/\r/g, "").split("\n").forEach((line, i) => { if (i) document.execCommand("insertParagraph"); if (line) document.execCommand("insertText", false, line); });
-    }
+    if (!(await fillWindow(dlg, d))) { toast("Couldn't put your message in here yet. It's kept: open a new message to try again."); return; }
     store.set("moving-draft", null);
     movingDone(dlg);
     delete dlg.dataset.qmGone;
@@ -6694,7 +7325,7 @@ const isMinimized = (dlg) => !dlg.dataset.qmGone && !dlg.closest(".aSs") && body
 
 /* "•••" in a writing window shows the quoted text, and now hides it again */
 document.addEventListener("click", (e) => {
-  const t = e.isTrusted && e.target.closest && e.target.closest(".ajR");
+  const t = enabled && e.isTrusted && e.target.closest && e.target.closest(".ajR");
   const win = t && t.closest('.nH.Hd[role="dialog"], .ip.qm-float');
   if (!win) return;
   const box = $(".editable", win);
@@ -6840,7 +7471,7 @@ async function aiWrite(win, instruction) {
 }
 window.addEventListener("keydown", (e) => {
   if (!enabled || !e.isTrusted || introOn || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || (e.key || "").toLowerCase() !== "j") return;
-  if (!aiOn()) return;
+  if (!aiOn() || document.getElementById("qm-panel-scrim")) return;
   if (e.target.closest && e.target.closest(".qm-composer")) return; // the message box handles its own
   const bar = e.target.closest && e.target.closest(".ip.qm-bar");
   if (bar && composerOf()) { e.preventDefault(); e.stopImmediatePropagation(); toggleComposerAI(composerOf()); return; }
@@ -6867,8 +7498,17 @@ function ensureGBack() {
 /* typing that starts before the new message's window is up goes into it, not to Gmail's shortcuts */
 let composeKeys = null;
 window.addEventListener("keydown", (e) => {
-  if (!composeKeys || !e.isTrusted || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!enabled || !composeKeys || !e.isTrusted || e.metaKey || e.ctrlKey || e.altKey) return;
   if (!composeKeys.dlg && Date.now() - composeKeys.at > 4000) { composeKeys = null; return; } // (Gmail is slow: your keys are yours again)
+  // the new message's field has the keyboard: what you typed on the way goes in first, and from this key on, every key
+  // is Gmail's own (its suggestions see them, and Tab or Enter take the address you typed, not the next field)
+  if (composeKeys.dlg && composeKeys.dlg.contains(e.target) && typing(e.target)) {
+    const k = composeKeys;
+    composeKeys = null;
+    if (k.text) document.execCommand("insertText", false, k.text);
+    k.text = "";
+    return;
+  }
   if (typing(e.target) && !(composeKeys.dlg && composeKeys.dlg.contains(e.target))) return;
   if (e.key.length !== 1 && e.key !== "Backspace") return;
   e.preventDefault();
@@ -6888,7 +7528,8 @@ async function focusNewMessage(dlg, keys) {
   const f = field();
   if (keys.text && f) document.execCommand("insertText", false, keys.text);
 }
-function compose() {
+function compose(fill) {
+  const pre = fill && Array.isArray(fill.to) ? fill : null; // (as a button's onclick, it's handed the click)
   const keys = (composeKeys = { text: "", at: Date.now() });
   const before = new Set($$('.nH.Hd[role="dialog"]').filter(visible));
   const fab = document.getElementById("qm-fab");
@@ -6926,8 +7567,9 @@ function compose() {
     }, 1500);
     freshWindow(dlg);
     dlg.dataset.qmHome = "fab";
-    focusNewMessage(dlg, keys).finally(() => { if (composeKeys === keys) composeKeys = null; });
-    await finishOpen(ctx, dlg, { place: (r) => windowSpot(null, "fab", { w: r.width, h: r.height }) });
+    if (pre) { dlg.dataset.qmFilled = "1"; if (composeKeys === keys) composeKeys = null; }
+    else focusNewMessage(dlg, keys).finally(() => { if (composeKeys === keys) composeKeys = null; });
+    await finishOpen(ctx, dlg, { place: (r) => windowSpot(null, "fab", { w: r.width, h: r.height }), fill: pre ? () => fillWindow(dlg, pre, true) : null });
     ROOT.classList.remove("qm-popping");
     return dlg;
   }).catch(() => { endOpen(ctx); ROOT.classList.remove("qm-popping"); for (const d of $$("[data-qm-gone]")) if (!d.dataset.qmClosing) { delete d.dataset.qmGone; unframe(d); } return null; });
@@ -6949,7 +7591,10 @@ async function leaveTo(url, hint, preview) {
   closePalette();
   closeMenu();
   if (preview) preview();
-  await until(() => !savingNow(), 2500, 80);
+  for (const d of $$('.nH.Hd[role="dialog"]')) if (visible(d) && !d.dataset.qmClosing && hasContent(d)) { const b = gmailBtn(d, "button.Ha, [aria-label^='Save & close' i]"); if (b) press(b); }
+  if ($$(".ip.adB").some((ip) => visible(ip) && hasContent(ip))) await wait(Math.max(0, 1600 - (Date.now() - lastInput)));
+  await wait(120);
+  await until(() => !savingNow(), 3500, 80);
   session.set("arrive", JSON.stringify(Object.assign({ at: Date.now() }, hint || {})));
   leaving = true;
   location.assign(url);
@@ -6991,7 +7636,7 @@ function switchAccount(a) {
 /* open a conversation that belongs to another account (from Everything) */
 function openElsewhere(r) {
   const o = { id: r.id, subject: r.subject, from: whoText(r), single: !r.count };
-  leaveTo(`/mail/u/${r.account.index}/${threadHash(everyFolder, r.id)}`, { opening: o }, () => { opening = Object.assign({ at: Date.now() + 60000 }, o); renderOpening(); });
+  leaveTo(`/mail/u/${r.account.index}/${threadHash(everyFolder, r.id, r.account.email)}`, { opening: o }, () => { opening = Object.assign({ at: Date.now() + 60000 }, o); renderOpening(); });
 }
 /* before Gmail is ready: what this page is about to show, from memory */
 const LIST_HASH = /^#(inbox|starred|snoozed|sent|drafts|all|imp|scheduled|spam|trash|category\/|label\/|search\/-in)/;
@@ -7048,9 +7693,9 @@ function paletteItems() {
   if (multi) for (const a of accounts) if (a.index !== me) list.push({ section: "Write", label: "New message from " + accountLabel(a.email), keys: "compose " + a.email, ico: sw(a.email), hint: "", run: () => leaveTo(`/mail/u/${a.index}/#inbox?compose=new`, { list: "#inbox" }, () => previewList(a, "#inbox")) });
   // everything the menu has
   const here = baseHash(hashNow());
-  for (const [label, hash, ico] of folderLinks()) {
-    const cur = hash === "#inbox" ? /^#inbox(\/p\d+)?$/.test(hashNow()) : here === hash;
-    list.push({ section: "Go to", label, keys: "folder", ico: icon(ico), hint: cur ? "Current" : folderCount(hash), run: () => go(hash) });
+  for (const [label, hash, ico, , run] of folderLinks()) {
+    const cur = run ? screen.kind === "paper" : hash === "#inbox" ? screen.kind !== "paper" && /^#inbox(\/p\d+)?$/.test(hashNow()) : here === hash;
+    list.push({ section: "Go to", label, keys: "folder", ico: icon(ico), hint: cur ? "Current" : run ? "" : folderCount(hash), run: run || (() => { if (paperOn && hash === "#inbox") closePaper(); go(hash); }) });
   }
   const seen = new Set();
   for (const a of $$('.aeN a[href*="#label/"]')) {
@@ -7060,7 +7705,21 @@ function paletteItems() {
     seen.add(hash);
     if (name) list.push({ section: "Go to", label: name, keys: "label", ico: icon("labels"), hint: "", quiet: true, run: () => go(hash) });
   }
-  for (const [label, hash, ico] of [["Scheduled", "#scheduled", "later"], ["Spam", "#spam", "archive"], ["Trash", "#trash", "trash"]]) list.push({ section: "Go to", label, keys: "folder", ico: icon(ico), hint: "", quiet: true, run: () => go(hash) });
+  for (const [label, hash, ico] of [["Important", "#imp", "labels"], ["Scheduled", "#scheduled", "later"], ["Chats", "#chats", "ai"], ["Spam", "#spam", "archive"], ["Trash", "#trash", "trash"]]) list.push({ section: "Go to", label, keys: "folder", ico: icon(ico), hint: "", quiet: true, run: () => go(hash) });
+  // your Google account, which Gmail's own header (hidden) holds
+  list.push({ section: "Accounts", label: "Add another account", keys: "google sign in add account", ico: icon("people"), hint: "", quiet: true, run: () => openUrl("https://accounts.google.com/AddSession?continue=" + encodeURIComponent(location.origin + "/mail/")) });
+  list.push({ section: "Accounts", label: "Manage your Google Account", keys: "google account profile security password", ico: icon("people"), hint: "", quiet: true, run: () => openUrl("https://myaccount.google.com/?authuser=" + accountIndex()) });
+  list.push({ section: "Accounts", label: "Sign out of all accounts", keys: "google log out logout sign out", ico: icon("x"), hint: "", quiet: true, run: () => confirmBox({ title: "Sign out of all your Google accounts?", body: ["Gmail signs you out of every account in this browser."], ok: "Sign out" }).then((ok) => { if (ok) { leaving = true; location.assign("https://accounts.google.com/Logout?continue=" + encodeURIComponent(location.origin + "/mail/")); } }) });
+  // in a conversation: what it can do, from here
+  if ((screen.kind === "thread" || screen.kind === "reading") && gmailMain()) {
+    const act = (label, keys, run) => list.push({ section: "This conversation", label, keys: "conversation " + keys, ico: icon("mailopen"), hint: "", run });
+    act("Reply", "answer", () => replyBarAction("reply"));
+    act("Reply all", "answer everyone", () => replyBarAction("all"));
+    act("Forward", "send on", () => replyBarAction("forward"));
+    if (gmailToolbar("7", ["Archive"])) act("Done", "archive", () => onThisThread(() => { const id = screen.key, subj = currentSubject(); if (press(gmailToolbar("7", ["Archive"]))) { dropRow(id, "done"); undoFor(id, "done", subj); } }));
+    act("Later", "snooze", () => { const b = $("#qm-view .qm-bar.qm-right [aria-label='Later']:not(.qm-leaving *)"); if (b) threadLater(b); });
+    act("More", "labels move to spam print mute filter", () => { const b = $("#qm-view .qm-bar.qm-right [aria-label='More']:not(.qm-leaving *)"); if (b) threadMore(b); });
+  }
   list.push({ section: "Go to", label: "Find", keys: "search", ico: icon("find"), hint: keyLabel(keyFor("find")), quiet: true, run: () => openFind() });
   list.push({ section: "Go to", label: "Big files", sub: "Files over 10 MB: where your storage goes", keys: "large big files storage space attachments over 10 mb free up room", ico: icon("clip"), hint: "", quiet: true, run: () => { files.kind = "all"; files.from = null; files.large = true; goFiles(); } });
   if ((screen.kind === "thread" || screen.kind === "reading") && gmailMain()) {
@@ -7072,7 +7731,8 @@ function paletteItems() {
   for (const d of drafts.slice(0, 25)) list.push({ section: "Drafts", label: d.subject && d.subject !== "(no subject)" ? d.subject : "No subject", sub: [whoText(d).replace(/^draft,?\s*/i, ""), d.when].filter(Boolean).join(" · "), ico: icon("drafts"), hint: multi ? sw(d.account.email) : "", run: () => openDraft(d) });
   // settings: the pages, and the switches you'd reach for (when you type for them)
   list.push({ section: "Settings", label: "Settings", keys: "preferences options", ico: icon("settings"), hint: "", quiet: true, run: () => openPanel() });
-  for (const [k, label, ico, keys] of [["display", "Display", "display", "order pictures of people brief numbers counts reading whole conversations"], ["look", "Look", "image", "background picture wallpaper image photo accent theme color size spacing lines fonts reading width soft depth"], ["layout", "Layout", "menu", "menu side right left screen edge quick buttons rail account label dual view split"], ["colors", "Colors", "colors", "account colors people colors waiting on you"], ["people", "People", "people", "names pictures colors emoji contacts"], ["keys", "Shortcuts", "keys", "keyboard keys hotkeys"], ["gemini", "Gemini", "spark", "gemini studio flow sheet piles categories labels summaries deadlines"], ["ai", "AI", "ai", "gemini assistant models usage summaries brief"]])
+  list.push({ section: "Settings", label: "Gmail settings", keys: "gmail options filters forwarding signature vacation", ico: icon("settings"), hint: "", quiet: true, run: () => go("#settings/general") });
+  for (const [k, label, ico, keys] of [["calm", "Calm", "sun", "tides paper senders quiet title counts end"], ["writing", "Writing", "write", "templates promises considerate sending signature"], ["flags", "Flags", "settings", "about config advanced css every setting"], ["display", "Display", "display", "order pictures of people brief numbers counts reading whole conversations"], ["look", "Look", "image", "background picture wallpaper image photo accent theme color size spacing lines fonts reading width soft depth"], ["layout", "Layout", "menu", "menu side right left screen edge quick buttons rail account label dual view split"], ["colors", "Colors", "colors", "account colors people colors waiting on you"], ["people", "People", "people", "names pictures colors emoji contacts"], ["keys", "Shortcuts", "keys", "keyboard keys hotkeys"], ["gemini", "Gemini", "spark", "gemini studio flow sheet piles categories labels summaries deadlines"], ["ai", "AI", "ai", "gemini assistant models usage summaries brief"]])
     if (k !== "gemini" || aiOn()) list.push({ section: "Settings", label, keys: "settings " + keys, ico: icon(ico), hint: "", quiet: true, run: () => openPanel(k) });
   if (gemSheet() && aiOn()) {
     list.push({ section: "Settings", label: "Gemini's sheet", keys: "gemini sheet spreadsheet studio flow notes", ico: icon("spark"), hint: "", quiet: true, run: () => openUrl("https://docs.google.com/spreadsheets/d/" + gemSheet() + "/edit?authuser=" + gemAuthuser()) });
@@ -7080,6 +7740,7 @@ function paletteItems() {
   }
   list.push({ section: "Settings", label: "Shortcut sheet", keys: "keyboard keys help", ico: icon("keys"), hint: keyLabel(keyFor("keys")), quiet: true, run: () => openKeys() });
   list.push({ section: "Settings", label: "Welcome to Umbra", keys: "welcome introduction intro eclipse start tour sign in chatgpt", ico: icon("spark"), hint: "", quiet: true, run: () => intro(true) });
+  list.push({ section: "Settings", label: "Plain Gmail in this tab", keys: "turn off umbra disable original gmail normal classic pause", ico: icon("x"), hint: "", quiet: true, run: () => plainGmail(true) });
   const bg = prefs.bg || {};
   const flip = (label, on, set, keys) => list.push({ section: "Settings", label, keys: "toggle setting " + (keys || ""), ico: icon("settings"), hint: on ? onPill() : "", on, quiet: true, run: () => { set(); savePrefs(); toast(label + (on ? " off." : " on.")); } });
   flip("Dual view", !!prefs.split, () => { prefs.split = !prefs.split; }, "split pane list and reading side by side");
@@ -7138,8 +7799,11 @@ function score(item, q) {
   }
   return s - at / 1000;
 }
+let paletteBack = null;
 function openPalette(focusSection) {
   if (palette) { closePalette(); return; }
+  const a0 = document.activeElement;
+  paletteBack = a0 && a0 !== document.body && !a0.closest("#qm-pal-scrim") ? a0 : null;
   closeSide();
   closeMenu();
   const input = h("input", { type: "text", placeholder: "Filter, switch account, write, or open a draft…", "aria-label": "Search actions", autocomplete: "off", spellcheck: "false" });
@@ -7187,32 +7851,46 @@ function openPalette(focusSection) {
   input.addEventListener("input", () => { active = 0; draw(); askAhead(input.value); });
   input.addEventListener("keydown", (e) => {
     e.stopPropagation();
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "ArrowDown" || (e.key === "n" && e.ctrlKey)) { e.preventDefault(); active = (active + 1) % Math.max(1, items.length); mark(); }
     else if (e.key === "ArrowUp" || (e.key === "p" && e.ctrlKey)) { e.preventDefault(); active = (active - 1 + items.length) % Math.max(1, items.length); mark(); }
     else if (e.key === "Enter") { e.preventDefault(); runItem(active); }
     else if (e.key === "Escape" || ((e.metaKey || e.ctrlKey || e.altKey) && isKey(e, "palette"))) { e.preventDefault(); closePalette(); }
   });
   document.body.appendChild(scrim);
-  palette = { scrim, draw, input };
+  palette = { scrim, draw, input, back: paletteBack, at: hashNow() };
   draw();
   input.focus(); // at once: keys typed right after ⌘K must land here, not on the list's shortcuts
   // and again if anything takes it in the moments after (Gmail redrawing, a click still settling)
   const opened = Date.now();
   for (const ms of [10, 60, 160, 400]) setTimeout(() => { if (palette && palette.input === input && document.activeElement !== input && lastPointer < opened) input.focus({ preventScroll: true }); }, ms);
-  // keep this account's drafts fresh (only while a list is showing, so nothing you're writing is touched)
+  // keep this account's drafts fresh (only while a list is showing, so nothing you're writing is touched; and once you
+  // pause, so Gmail changing pages out of sight never slows what you type)
   const box = store.get(boxKey(accountEmail(), "#drafts"), null);
-  if ((!box || Date.now() - box.at > 60000) && screen.kind === "stream") peekFolder("#drafts").then(() => { if (palette) palette.draw(); });
+  if ((!box || Date.now() - box.at > 60000) && screen.kind === "stream") {
+    const fresh = () => {
+      if (!palette || palette.input !== input || screen.kind !== "stream") return;
+      if (Date.now() - lastInput < 700) { setTimeout(fresh, 400); return; }
+      peekFolder("#drafts").then(() => { if (palette) palette.draw(); });
+    };
+    setTimeout(fresh, 800);
+  }
 }
 function closePalette() {
   if (!palette) return;
-  const { scrim } = palette;
+  const { scrim, back, at } = palette;
   palette = null;
   scrim.classList.add("qm-out");
   setTimeout(() => scrim.remove(), 130);
+  // (unless what you chose took you somewhere, or put the keyboard somewhere, itself)
+  setTimeout(() => {
+    const a = document.activeElement;
+    if (back && back.isConnected && visible(back) && (!a || a === document.body || scrim.contains(a)) && hashNow() === at) back.focus({ preventScroll: true });
+  }, 0);
 }
 /* look at one of Gmail's folders out of sight for a moment (to read it), then come back */
 async function peekFolder(folder) {
-  if (peeking || ghost || writingAnything()) return false;
+  if (!enabled || peeking || ghost || writingAnything()) return false;
   const back = hashNow();
   if (baseHash(back) === folder) { const m = mainList(folder); if (m && listReady(m)) publish(folder, readList(m), listPage(m), isOff(olderOf(m))); return true; }
   peeking = true;
@@ -7228,6 +7906,7 @@ async function peekFolder(folder) {
     // back where you were, unless you went somewhere else yourself meanwhile
     if (hashNow() !== back && baseHash(hashNow()) === folder) location.replace(back);
     release();
+    goWaiting();
     setTimeout(() => { peeking = false; invalidate(true); }, 200);
   }
 }
@@ -7252,6 +7931,7 @@ async function openDraft(d) {
     if (res && res !== "thread") { res.dataset.qmGone = "1"; opened = res; } // out of sight until it's drawn
   } finally {
     if (!toThread && hashNow() !== back && baseHash(hashNow()) === "#drafts") location.replace(back);
+    if (!toThread) goWaiting(); else waitingGo = "";
     setTimeout(() => { peeking = false; invalidate(true); }, toThread ? 0 : 150);
   }
   if (opened) { opened.dataset.qmHome = "draft"; await finishOpen(null, opened, { focus: (dd) => { const b = $(".editable", dd); if (b) focusEnd(b); } }); }
@@ -7276,8 +7956,8 @@ const markDropWin = (w) => { if (dropWin && dropWin !== w) dropWin.classList.rem
 function dropLabel() {
   const c = composerOf();
   if ((screen.kind === "thread" || screen.kind === "reading") && c && c.root.offsetParent && c.t) {
-    const o = othersOf(c.t);
-    return { kind: "reply", text: o.length ? "Attach to your reply to " + listNames(o) : "Attach to your reply" };
+    const o = replyNames(c, c.t);
+    return { kind: "reply", text: o.length ? "Attach to your reply to " + listNames(o.length > 4 ? [...o.slice(0, 3), o.length - 3 + " more"] : o) : "Attach to your reply" };
   }
   return { kind: "new", text: "Start a new message with these" };
 }
@@ -7298,32 +7978,48 @@ function hideDrop() {
 }
 window.addEventListener("dragover", (e) => {
   if (!enabled || !hasFiles(e)) return;
-  // over a writing window: it lights up, and the files go into that message
+  // over a writing window: it lights up, and Gmail takes the files itself (its own drop zone: as attachments, or a
+  // picture dropped into the words goes in among them)
   const w = windowAt(e);
-  if (w) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; hideDrop(); markDropWin(w); clearTimeout(dropTimer); dropTimer = setTimeout(() => markDropWin(null), 180); return; }
+  if (w) { hideDrop(); markDropWin(w); clearTimeout(dropTimer); dropTimer = setTimeout(() => markDropWin(null), 180); return; }
   markDropWin(null);
   e.preventDefault();
   e.dataTransfer.dropEffect = "copy";
   showDrop();
 }, true);
+// (Gmail didn't claim a drag over its window: the drop is still allowed, and Umbra puts the files in)
+window.addEventListener("dragover", (e) => {
+  if (!enabled || !hasFiles(e) || e.defaultPrevented || !windowAt(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+});
 window.addEventListener("drop", (e) => {
   if (!enabled || !hasFiles(e)) return;
-  const w = windowAt(e);
+  hideDrop();
+  if (windowAt(e)) return; // (Gmail's, below; Umbra only if Gmail lets it pass)
+  markDropWin(null);
   e.preventDefault();
   e.stopPropagation();
   const files = Array.from(e.dataTransfer.files || []);
-  hideDrop();
-  markDropWin(null);
   if (!files.length) return;
-  if (w) { if (!attachFiles(w, files)) toast("Couldn't attach those."); return; }
   if (dropLabel().kind === "reply") attachToReply(files).then((ok) => { if (!ok) toast("Couldn't attach those."); });
   else compose().then((dlg) => { if (!dlg || !attachFiles(dlg, files)) toast("Couldn't attach those."); });
 }, true);
+window.addEventListener("drop", (e) => {
+  if (!enabled || !hasFiles(e)) return;
+  const w = windowAt(e);
+  markDropWin(null);
+  if (!w || e.defaultPrevented) return;
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files || []);
+  if (files.length && !attachFiles(w, files)) toast("Couldn't attach those.");
+});
 
 /* =================================================================== Gmail's toasts
    ("Message sent · Undo", "Conversation archived · Undo"). Gmail draws them in a layer Umbra's screens
    cover, so Umbra shows the same toast on top, its buttons pressing Gmail's. */
 function watchGmailToasts() {
+  if (!enabled) return;
   for (const b of $$(".b8")) {
     if (b.dataset.qmWatch) continue;
     b.dataset.qmWatch = "1";
@@ -7334,12 +8030,13 @@ function watchGmailToasts() {
 let hush = null;
 const hushToast = (re, ms) => { hush = { re, until: Date.now() + ms }; };
 function syncToast(b) {
+  if (!enabled) return;
   const vh = $(".vh", b) || b;
   const shown = !/-10000/.test(b.getAttribute("style") || "") && !!text(vh) && !(hush && hush.until > Date.now() && hush.re.test(text(vh)));
   let t = document.getElementById("qm-gtoast");
   if (!shown) {
     if (gtoastGone && gtoastGone.b === b) gtoastGone = null;
-    if (t && t.qmFor === b && !t.classList.contains("qm-out")) { t.classList.add("qm-out"); setTimeout(() => { if (t.classList.contains("qm-out")) t.remove(); }, 200); }
+    if (t && t.qmFor === b && !t.classList.contains("qm-out")) { t.classList.add("qm-out"); setTimeout(() => { if (t.classList.contains("qm-out")) t.remove(); }, 200); const mine = document.getElementById("qm-toast"); if (mine) mine.classList.remove("qm-above"); }
     return;
   }
   // after a send, Gmail's Undo is a role="alert" span, not a link
@@ -7352,6 +8049,8 @@ function syncToast(b) {
   if (t && t.qmFor === b && t.dataset.sig === sig && !t.classList.contains("qm-out")) return;
   if (gtoastGone && gtoastGone.b === b && gtoastGone.sig === sig) return; // (dismissed: until Gmail says something new)
   if (t) t.remove();
+  const mine = document.getElementById("qm-toast");
+  if (mine) mine.classList.add("qm-above"); // (Umbra's own note, if one is up, moves above Gmail's)
   const live = (label) => {
     const els = $$('[role="link"], [role="button"], a, [id^="link_"], .ag.a8k, span', $(".vh", b) || b).filter((x) => text(x) === label);
     return els.find((x) => !els.some((y) => y !== x && x.contains(y))) || null;
@@ -7391,7 +8090,7 @@ function openKeys() {
   const panel = h("div", { id: "qm-keys", role: "dialog", "aria-label": "Keyboard shortcuts" },
     rows("Anywhere", mine("Anywhere")),
     rows("Lists", [["esc", "Clear filters"], ["↵", "Open"], ["⌘ click", "Select"], ["⇧ click", "Select a run"], ...mine("Lists")]),
-    rows("Go to", [...chordsNow().map(([k, label]) => ["G " + k.toUpperCase(), label]), [MOD_KEY.trim() + " 1–9", "The menu's first nine places"]]),
+    rows("Go to", [...chordsNow().map(([k, label]) => ["G " + k.toUpperCase(), label]), ...(TABS_KEEP_NUMBERS ? [] : [[MOD_KEY.trim() + " 1–9", "The menu's first nine places"]])]),
     rows("Conversations", [...mine("Conversations"), ["⌘ ↵", "Send"], ...(aiOn() ? [["⌘ J", "Write with AI"]] : []), [(back ? back + " " : "") + "esc", "Back"]]),
     h("button", { type: "button", class: "qm-keyedit", onclick: () => { close(); openPanel("keys"); } }, "Change shortcuts"));
   const scrim = h("div", { id: "qm-keys-scrim" }, panel);
@@ -7442,6 +8141,10 @@ function keyFor(id) {
 function keyOf(e) {
   let k = e.key || "";
   if (e.altKey && /^Key[A-Z]$/.test(e.code || "")) k = e.code.slice(3).toLowerCase(); // ⌥ makes letters into symbols on a Mac
+  // (Caps Lock on: a letter is still the letter you meant; ⇧ is what makes one a capital)
+  else if (/^[a-z]$/i.test(k) && !e.metaKey && !e.ctrlKey && !e.altKey && e.getModifierState && e.getModifierState("CapsLock")) k = e.shiftKey ? k.toUpperCase() : k.toLowerCase();
+  // (a symbol your keyboard types with ⌥, like # or \ on many layouts: that symbol, as you see it)
+  else if (e.altKey && !e.metaKey && !e.ctrlKey && k.length === 1 && !/[a-z0-9]/i.test(k) && /^(Digit\d|Minus|Equal|Bracket\w+|Backslash|Semicolon|Quote|Comma|Period|Slash|Backquote|IntlBackslash)$/.test(e.code || "")) return k;
   const mod = e.metaKey || e.ctrlKey || e.altKey;
   if (mod && k.length === 1) k = k.toLowerCase();
   else if (e.shiftKey && /^[a-z]$/.test(k)) k = k.toUpperCase(); // (some keyboards and tools send ⇧ with a small letter)
@@ -7469,17 +8172,17 @@ function keyHints() {
 }
 const typing = (t) => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 function moveCursor(d) {
-  const holder = $("#qm-view [data-order]");
+  const holder = $("#qm-view [data-order]:not(.qm-leaving *)");
   if (!holder) return;
   const n = holder.dataset.order ? holder.dataset.order.split(",").length : 0;
   if (!n) return;
   cursor = Math.max(0, Math.min(n - 1, (cursor < 0 ? (d > 0 ? -1 : n) : cursor) + d));
   cursorId = holder.dataset.order.split(",")[cursor] || "";
   invalidate(true);
-  requestAnimationFrame(() => { const c = $("#qm-view .qm-cursor"); if (c) c.scrollIntoView({ block: "nearest" }); });
+  requestAnimationFrame(() => { const c = $("#qm-view .qm-cursor:not(.qm-leaving *)"); if (c) c.scrollIntoView({ block: "nearest" }); });
 }
 function cursorRow() {
-  const holder = $("#qm-view [data-order]");
+  const holder = $("#qm-view [data-order]:not(.qm-leaving *)");
   if (!holder || cursor < 0) return null;
   const id = holder.dataset.order.split(",")[cursor];
   const r = gmailMain() && readRows(gmailMain()).find((x) => x.id === id);
@@ -7536,6 +8239,7 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("keydown", (e) => {
   // (the welcome is up: its keys are its own, and nothing happens behind it)
   if (!enabled || !e.isTrusted || introOn || document.getElementById("qm-panel-scrim") || document.getElementById("qm-keys-scrim")) return;
+  if (e.isComposing || e.keyCode === 229) return; // (an input method choosing a character: its keys)
   if (document.getElementById("qm-confirm-scrim")) return; // a question is being asked: its own keys (esc says no)
   if (fileView) return; // a file is open over everything: its own keys
   if (catchFindAhead(e)) return;
@@ -7548,6 +8252,8 @@ window.addEventListener("keydown", (e) => {
   const k = mod ? "" : e.key;
   // (esc in the reply bar: out of it, and the bar folds away if nothing's written)
   if (k === "Escape" && e.target.closest && e.target.closest(".ip.qm-bar")) { e.preventDefault(); e.stopImmediatePropagation(); e.target.blur(); const sl = barSlot(); if (sl) sl.qmAside(); return; }
+  // (esc in a message being written is Gmail's: it closes the suggestions under To, or a menu of its own)
+  if (k === "Escape" && e.target.closest && e.target.closest('.nH.Hd[role="dialog"], .ip.qm-float')) return;
   if (k === "Escape") {
     if (palette) { e.preventDefault(); e.stopImmediatePropagation(); closePalette(); return; }
     if (menu) { e.preventDefault(); e.stopImmediatePropagation(); const a = menu.anchor; closeMenu(); if (a.isConnected) a.focus({ preventScroll: true }); return; }
@@ -7575,7 +8281,8 @@ window.addEventListener("keydown", (e) => {
   if (ROOT.classList.contains("qm-mfull-on") && (is("reply") || is("replyAll") || is("forward"))) closeFullMsg(true);
   if (is("find")) { stop(); openFind(); return; }
   if (is("keys")) { stop(); openKeys(); return; }
-  if (is("menu")) { stop(); if (ROOT.classList.contains("qm-side-open")) closeSide(); else openSide(false); return; }
+  if (is("menu")) { stop(); if (ROOT.classList.contains("qm-side-open")) closeSide(); else openSide(true); return; }
+  if (ROOT.classList.contains("qm-side-open")) return; // (the menu is open: its keys, nothing done to the list behind it)
   if (view && view.hidden) return;
   if (is("compose")) { stop(); compose(); return; }
   // a key you moved elsewhere does nothing now (rather than whatever Gmail would do with it)
@@ -7591,7 +8298,7 @@ window.addEventListener("keydown", (e) => {
     if (item) cursor = everyList.indexOf(item);
     for (let i = cursor; item && gone.has(item.id) && i < everyList.length - 1;) item = everyList[++i];
     if (item && gone.has(item.id)) item = null;
-    const rowAt = () => (item && $(`#qm-view .qm-rows .qm-row[data-id="${CSS.escape(item.id)}"]`)) || null;
+    const rowAt = () => (item && $(`#qm-view .qm-rows .qm-row[data-id="${CSS.escape(item.id)}"]:not(.qm-leaving *)`)) || null;
     // another account's mail (Everything) goes through that account's own tab, as its buttons do
     const act = (kindOf, el, anchor) => (item.account && item.account.index !== accountIndex() ? rowDoThere(item, kindOf, el) : rowDo(item, kindOf, el, anchor));
     // with anything selected, these do it to all of them
@@ -7606,6 +8313,7 @@ window.addEventListener("keydown", (e) => {
     else if (is("trash") && item) { stop(); act(everyFolder === "#drafts" ? "discard" : "trash", rowAt()); }
     else if (is("star") && item) { stop(); act("star", rowAt()); }
     else if ((is("unread") || is("read")) && item) { stop(); if (is("unread") !== !!item.unread) act("read", rowAt()); }
+    else if (is("later") && chosen.size) { const b = $('#qm-view .qm-selbar [aria-label^="Later" i]:not(.qm-leaving *)'); stop(); if (b) bulkPicker(["Snooze"], ["Snooze"], b); }
     else if (is("later") && item) { const b = rowAt() && $('[aria-label^="Later" i]', rowAt()); stop(); if (b) act("later", rowAt(), b); }
     else if (is("select") && item) { stop(); choose(item); }
     // (no cursor yet: these do nothing, rather than Gmail doing them to whichever row it has chosen)
@@ -7615,7 +8323,7 @@ window.addEventListener("keydown", (e) => {
     else if (k.length === 1 && !KEYS.some(([id]) => is(id))) stop();
   } else if (kind === "find") {
     // (the highlighted result: left to Gmail, these keys would act on Gmail's own first row)
-    const holder = $("#qm-view [data-order]");
+    const holder = $("#qm-view [data-order]:not(.qm-leaving *)");
     const id = holder && cursor >= 0 ? holder.dataset.order.split(",")[cursor] || "" : "";
     const item = id && !gone.has(id) ? findList.rows.find((x) => x.id === id) : null;
     if (is("down") || k === "ArrowDown") { stop(); moveCursor(1); }
@@ -7631,24 +8339,30 @@ window.addEventListener("keydown", (e) => {
     } else if (!mod && k.length === 1 && !KEYS.some(([id]) => is(id))) stop(); // (not Gmail's own results underneath)
   } else if (kind === "thread" || kind === "reading") {
     const c = composerOf();
-    if (k === "Escape" || is("back")) { stop(); goBack(); }
-    else if (is("done")) { const b = gmailToolbar("7", ["Archive"]); if (b) { stop(); press(b); } }
+    // (a message open full screen: back, or ←, closes it, and you're in the conversation where you were)
+    if (ROOT.classList.contains("qm-mfull-on") && (is("back") || k === "ArrowLeft")) { stop(); closeFullMsg(); }
+    else if (k === "Escape" || is("back")) { stop(); goBack(); }
+    else if (is("done") && (lookBusy() || gmailToolbar("7", ["Archive"]))) { stop(); onThisThread(() => { const b = gmailToolbar("7", ["Archive"]), id = screen.key, subj = currentSubject(); if (b && press(b)) { dropRow(id, "done"); undoFor(id, "done", subj); } }); }
     // (done here, not left to Gmail's own shortcuts: those are off unless you turned them on in Gmail)
-    else if (is("trash")) { const b = gmailToolbar("10", ["Delete"]); if (b) { stop(); press(b); } }
-    else if (is("unread")) { const b = gmailToolbar("2", ["Mark as unread"]); if (b) { stop(); press(b); } }
-    else if (is("star")) { const b = starButton(); if (b) { stop(); press(b); } }
+    else if (is("trash") && (lookBusy() || gmailToolbar("10", ["Delete"]))) { stop(); onThisThread(() => { const b = gmailToolbar("10", ["Delete"]), id = screen.key, subj = currentSubject(); if (b && press(b)) { dropRow(id, "trash"); undoFor(id, "trash", subj); } }); }
+    else if (is("later")) { const b = $("#qm-view .qm-bar.qm-right [aria-label='Later']:not(.qm-leaving *)"); if (b) { stop(); threadLater(b); } }
+    else if (is("unread") && (lookBusy() || gmailToolbar("2", ["Mark as unread"]))) { stop(); onThisThread(() => { const b = gmailToolbar("2", ["Mark as unread"]), id = screen.key; if (b && press(b)) markUnreadHere(id); }); }
+    else if (is("star") && (lookBusy() || starButton())) { stop(); toggleThreadStar(); }
     // r is Reply, a is Reply all, in the box under the conversation (as the buttons are), unless a window has it
     else if ((is("reply") || is("replyAll")) && c && !threadWindow()) { stop(); engage(c); openBar(is("reply") ? "reply" : "all"); }
     else if (is("reply")) { stop(); replyBarAction("reply"); }
     else if (is("replyAll")) { stop(); replyBarAction("all"); }
     else if (is("forward")) { stop(); replyBarAction("forward"); }
     // the next and previous conversation of the list you came from
-    else if ((is("down") || is("up")) && everyList.length) {
-      const i = everyList.findIndex((x) => x.id === screen.key);
-      const next = i >= 0 ? everyList[i + (is("down") ? 1 : -1)] : null;
+    else if ((is("down") || is("up")) && (everyList.length || ROOT.classList.contains("qm-splitting"))) {
+      const pool = ROOT.classList.contains("qm-splitting") ? paneRows() : everyList;
+      const i = pool.findIndex((x) => x.id === screen.key);
+      const next = i >= 0 ? pool[i + (is("down") ? 1 : -1)] : null;
       if (next) { stop(); openStreamRow(next); }
     }
-  } else if (kind && !mod && (LIST_KEYS.some(is) || k === "Enter" || (k.length === 1 && !KEYS.some(([id]) => is(id))))) stop(); // Umbra's other pages (the paper, Files, Senders…): not Gmail's list underneath
+  } else if (kind === "paper" && (k === "Escape" || is("back"))) { stop(); closePaper(); }
+  else if (/^(todos|subs)$/.test(kind) && (k === "Escape" || is("back"))) { stop(); go("#inbox"); }
+  else if (kind && !mod && (LIST_KEYS.some(is) || k === "Enter" || (k.length === 1 && !KEYS.some(([id]) => is(id))))) stop(); // Umbra's other pages (the paper, Files, Senders…): not Gmail's list underneath
 }, true);
 const LIST_KEYS = ["open", "done", "later", "star", "unread", "read", "trash", "select", "selDown", "selUp"];
 /* Umbra's own text fields keep their keys: while a reply is opening, Gmail takes keypresses page-wide
@@ -7673,14 +8387,23 @@ function openPanel(page) {
   const scrim = h("div", { id: "qm-panel-scrim" });
   const panel = h("div", { id: "qm-panel", role: "dialog", "aria-modal": "true", "aria-label": "Umbra settings" });
   scrim.appendChild(panel);
-  const close = () => { if (scrim.classList.contains("qm-out")) return; keyRecorder = null; scrim.classList.add("qm-out"); setTimeout(() => { scrim.remove(); invalidate(true); }, 150); };
+  const back = document.activeElement;
+  const close = () => { if (scrim.classList.contains("qm-out")) return; keyRecorder = null; scrim.classList.add("qm-out"); setTimeout(() => { scrim.remove(); invalidate(true); if (back && back.isConnected && back !== document.body) back.focus({ preventScroll: true }); }, 150); };
   scrim.addEventListener("mousedown", (e) => { if (e.target === scrim) close(); });
   const onKey = (e) => {
     if (!document.body.contains(scrim)) { window.removeEventListener("keydown", onKey, true); return; }
     if (!e.isTrusted) return;
     if (keyRecorder) { keyRecorder(e); return; } // setting a shortcut: this key is the answer
+    if (document.getElementById("qm-confirm-scrim") || (e.target.closest && e.target.closest(".qm-peditor"))) return; // (a question of its own, or an editor that cancels on esc)
     if (e.key === "Escape") { e.stopImmediatePropagation(); close(); }
-    else if (!typing(e.target) && e.key !== "Tab") e.stopImmediatePropagation();
+    else if (e.key === "Tab") {
+      // (round and round inside Settings: never off into Gmail behind it)
+      const all = $$('button:not([disabled]), a[href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])', panel).filter(visible);
+      if (!all.length) return;
+      const i = all.indexOf(document.activeElement);
+      if (i < 0 || (e.shiftKey && i === 0) || (!e.shiftKey && i === all.length - 1)) { e.preventDefault(); e.stopImmediatePropagation(); (e.shiftKey ? all[all.length - 1] : all[0]).focus(); }
+    }
+    else if (!typing(e.target)) e.stopImmediatePropagation();
   };
   window.addEventListener("keydown", onKey, true);
   const nav = h("nav", { class: "qm-pnav", "aria-label": "Settings" });
@@ -7703,7 +8426,9 @@ function openPanel(page) {
   panel.addEventListener("scroll", () => { if (panel.scrollTop || panel.scrollLeft) panel.scrollTop = panel.scrollLeft = 0; });
   document.body.appendChild(scrim);
   show(panelPage);
-  refreshAI(true).then(() => { if (panelPage === "ai" && scrim.isConnected) show("ai"); });
+  const here = $('button[aria-current="page"]', nav);
+  if (here) here.focus({ preventScroll: true });
+  refreshAI(true).then(() => { if (panelPage === "ai" && scrim.isConnected && !body.contains(document.activeElement)) show("ai", true); });
 }
 const openUrl = (url) => { if (typeof GM_openInTab === "function") GM_openInTab(url, { active: true, insert: true }); else window.open(url, "_blank", "noopener"); };
 const agoText = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + " min ago" : s < 86400 ? Math.round(s / 3600) + " h ago" : new Date(t).toLocaleDateString(); };
@@ -7795,7 +8520,9 @@ function keysPage(redraw) {
       keyRecorder = null;
       if (e.key === "Escape") { redraw(); return; }
       if ((e.key === "Backspace" || e.key === "Delete") && !(e.metaKey || e.ctrlKey || e.altKey)) { setKey(id, ""); return; }
-      setKey(id, keyOf(e));
+      const k = keyOf(e);
+      if (/^(g|Enter|Tab|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Space)$/.test(k)) { redraw(); toast(keyLabel(k) + " is taken: " + (k === "g" ? "it starts \u201cg, then a letter\u201d." : "lists and menus use it.") + " Pick another key."); return; }
+      setKey(id, k);
     };
   };
   const sec = (where) => h("section", {}, h("h3", { text: where }), ...KEYS.filter((x) => x[3] === where).map((x) => {
@@ -8387,14 +9114,22 @@ function aiPage(redraw) {
 
 /* =================================================================== main loop */
 let pending = false, forced = false, last = 0;
-function invalidate(force) { if (force) { forced = true; lastFindSig = lastThreadSig = ""; } schedule(); }
+// (forced: drawn at once, and Find's results read again. An open conversation is drawn again only when something in it
+// changed: its signature says so, and whatever changes it from outside clears lastThreadSig itself)
+function invalidate(force) { if (force) { forced = true; lastFindSig = ""; } schedule(); }
 function schedule() {
   if (pending) return;
   pending = true;
   const delay = forced ? 0 : Math.max(0, 100 - (performance.now() - last));
   setTimeout(() => requestAnimationFrame(run), delay);
 }
-const isThreadHash = (hash) => /\/([A-Za-z0-9_-]{14,}|thread-[a-z]:[\w-]+)$/.test(hash.split("?")[0]) && !/\/p\d+$/.test(hash);
+// (#inbox/<id>, #starred/<id>; a label, a search or a category has its name first: #label/Name/<id>, #search/words/<id>)
+function isThreadHash(hash) {
+  const parts = String(hash || "").split("?")[0].split("/");
+  if (/^p\d+$/.test(parts[parts.length - 1])) return false;
+  const need = /^#(label|search|category|advanced-search|apps|create-filter|settings)$/.test(parts[0]) ? 3 : 2;
+  return parts.length >= need && /^([A-Za-z0-9_-]{14,}|thread-[a-z]:[\w-]+)$/.test(parts[parts.length - 1]); // (a function declaration: hashes are read before the end of the file has run)
+}
 /* the conversation you clicked, drawn at once from what the list knew, until Gmail has loaded it */
 function renderOpening() {
   const o = opening;
@@ -8406,8 +9141,8 @@ function renderOpening() {
 /* a conversation Gmail doesn't show (still loading, deleted, or an out-of-date link): a moment of
    waiting, then a plain explanation, never Gmail's empty page */
 let lostAt = { hash: "", at: 0 };
-function renderLost(hash) {
-  if (lostAt.hash !== hash) { lostAt = { hash, at: Date.now() }; setTimeout(() => invalidate(true), 6100); }
+function renderLost(hash, now) {
+  if (lostAt.hash !== hash) { lostAt = { hash, at: Date.now() - (now ? 6001 : 0) }; if (!now) setTimeout(() => invalidate(true), 6100); }
   const late = Date.now() - lostAt.at > 6000;
   const { el } = setScreen("lost", hash + (late ? "!" : ""), () => h("div", { class: "qm-reading" }, h("div", { class: "qm-scroll" }, h("article", { class: "qm-article qm-lost" },
     late
@@ -8434,9 +9169,23 @@ function run() {
     ensureFab();
     ensureGBack();
     renderFolders();
+    if (Date.now() - (renderAccounts.at || 0) > 2000) { renderAccounts.at = Date.now(); renderAccounts(); } // (their counts read other tabs' lists: now and then)
     renderChip();
     watchGmailToasts();
-    if (peeking || ghost || aiPeeking) { decorateWriting(); return; } // a quick look behind the screen: keep it as it is
+    if (waitingGo && !looking()) goWaiting();
+    if (peeking || ghost || aiPeeking) {
+      // a quick look behind the screen: it stays as it is, except for where you've asked to go meanwhile, drawn from
+      // what Umbra already has (the conversation as the list knew it, or the list itself)
+      if (waitingGo) {
+        if (opening && isThreadHash(waitingGo)) renderOpening();
+        else if (!isThreadHash(waitingGo) && LIST_HASH.test(waitingGo.split("?")[0]) && everyFolder === baseHash(waitingGo) && mainSource() && mainSource().rows.size) {
+          ROOT.classList.add("qm-v-list");
+          renderStream({ kind: "loading", hash: waitingGo }, everything && accounts.length > 1);
+        }
+      }
+      decorateWriting();
+      return;
+    }
     const r = route();
     if (r.kind === "loading") {
       // a conversation on its way in dual view: the list stays on the left from the very first frame
@@ -8448,9 +9197,13 @@ function run() {
       return;
     }
     const threadish = isThreadHash(r.hash);
-    const listy = !threadish && (r.kind === "list" || (r.kind === "search" && baseHash(r.hash) === DONE_HASH));
+    // back to a list while Gmail still shows the conversation (it can take it most of a second): the list at once,
+    // from what Umbra already has of it
+    const backToList = r.kind === "thread" && !threadish && LIST_HASH.test(r.hash.split("?")[0]) && !findMode && !findPending && !askOn &&
+      everyFolder === baseHash(r.hash) && !!mainSource() && mainSource().rows.size > 0;
+    const listy = !threadish && (r.kind === "list" || backToList || (r.kind === "search" && baseHash(r.hash) === DONE_HASH));
     const all = everything && accounts.length > 1 && !findMode && !findPending && listy;
-    const waiting = opening && threadish && r.kind !== "thread" && Date.now() - opening.at < 6000;
+    const waiting = opening && threadish && Date.now() - opening.at < 6000 && (r.kind !== "thread" || (!!openThreadId() && openThreadId() !== String(opening.id)));
     // (a conversation's address, but Gmail shows something else — its own page, or still the list it was on: it
     // didn't open it. Never a frozen screen with no way on.)
     const lost = threadish && (r.kind === "gmail" || r.kind === "list") && !waiting && !findMode && !findPending;
@@ -8463,15 +9216,16 @@ function run() {
     const splitting = splitWanted() && !askOn && !findMode && (r.kind === "thread" || waiting);
     ROOT.classList.toggle("qm-splitting", splitting);
     if (askOn) renderAsk();
-    else if (paperOn && listy) { ensureSources(baseHash(r.hash), false); renderPaper(); }
+    else if (paperOn && listy) { ensureSources(baseHash(r.hash), !!all); renderPaper(); }
     else if ((findMode || findPending) && r.kind !== "search") renderFind(null, null);
     else if (waiting) renderOpening();
     else if (lost) renderLost(r.hash);
+    else if (backToList) { paperBack = false; renderStream({ kind: "loading", hash: r.hash }, all); }
     else if (listy) { paperBack = false; renderStream(r, all); openArrivedDraft(); if (isInboxFolder(baseHash(r.hash))) paperTurnover(); }
     else if (r.kind === "todos") renderTodos(r);
     else if (r.kind === "subs") renderSubs(r);
     else if (r.kind === "files") renderFiles(r);
-    else if (r.kind === "search") { findMode = false; renderFind(r, readRows(r.main)); }
+    else if (r.kind === "search") { findMode = false; renderFind(r, listSettled() ? readRows(r.main) : null); }
     else if (r.kind === "thread") { opening = null; if (arrival() && arrival().opening) session.set("arrive", ""); if (backPending) { backPending = false; backFor = r.hash; } renderThread(r); }
     if (splitting) renderPane(waiting && opening ? opening.id : screen.key);
     else if (r.kind === "gmail" && !lost) hideView(); // (Gmail's own page; not one it shows for a conversation it couldn't open)
@@ -8506,6 +9260,7 @@ function boot() {
   setInterval(heartbeat, 10000);
   document.addEventListener("visibilitychange", () => {
     heartbeat();
+    if (!document.hidden && emptyThread) invalidate();
     if (document.hidden || !restoreTo) return;
     const to = restoreTo;
     restoreTo = "";
@@ -8518,17 +9273,26 @@ function boot() {
     GM_addValueChangeListener("do", (k, old, req, remote) => { if (remote) doHere(req); });
   } else setInterval(() => { serve(store.get("want", null)); doHere(store.get("do", null)); }, 2000);
   refreshAI(false).then(() => { invalidate(true); gemFetch(false); });
-  setInterval(() => refreshAI(false).then(() => invalidate()), 5 * 60 * 1000);
+  setInterval(() => { if (enabled) refreshAI(false).then(() => invalidate()); }, 5 * 60 * 1000);
   // Gemini's notes on new mail (Settings › Gemini): read now, then every minute or so while you're here
   gemFetch(false);
-  setInterval(() => { if (!document.hidden) gemFetch(false); }, 60 * 1000);
+  setInterval(() => { if (enabled && !document.hidden) gemFetch(false); }, 60 * 1000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) gemFetch(false); });
   setTimeout(findAccounts, 2500);
-  setInterval(findAccounts, 5 * 60 * 1000);
+  setInterval(() => { if (enabled) findAccounts(); }, 5 * 60 * 1000);
   // Everything: pick up read/unread changes and new mail the frames show
   setInterval(() => { if (screen.kind === "stream" && sources.size > 1 && !document.hidden) invalidate(); }, 3000);
   // a message on its way here from another account: its stand-in, from the first moment
   showMovingIfAny();
+  // a link's new message (Gmail's full-page one, already addressed, that sent you here): its window, filled in, as soon
+  // as Gmail's Compose is there
+  if (session.get("link-compose")) {
+    (async () => {
+      await until(() => !linkCompose() || ($('[gh="cm"]') && gmailMain()), 20000, 100);
+      const d = linkCompose();
+      if (d) { session.set("link-compose", ""); composeTo(d); }
+    })();
+  }
   // tides and editions arrive on time (and an edition puts the last one away, if you asked)
   calmTick();
   paperTurnover();

@@ -13,7 +13,12 @@
   // (once that link is gone, Umbra is told, once, so it can ask for a reload instead of quietly losing changes)
   let staleSaid = false;
   const stale = () => { if (staleSaid) return; staleSaid = true; try { G.dispatchEvent(new Event("umbra:stale")); } catch (e) { /* nothing to tell */ } };
-  if (typeof setInterval === "function") { const watch = setInterval(() => { if (!alive()) { clearInterval(watch); stale(); } }, 20000); }
+  // (checked every couple of seconds, and as the tab comes back to the front: turned off in Chrome, Umbra steps aside
+  // at once rather than staying drawn over Gmail)
+  if (typeof setInterval === "function") {
+    const watch = setInterval(() => { if (!alive()) { clearInterval(watch); stale(); } }, 2000);
+    try { document.addEventListener("visibilitychange", () => { if (!alive()) stale(); }); } catch (e) { /* no document */ }
+  }
   const report = (e) => { try { console.error("Umbra Mail:", e); } catch (x) { /* nothing to tell */ } };
   const call = (fn, self, ...args) => { if (typeof fn === "function") try { fn.apply(self, args); } catch (e) { report(e); } };
   const send = (msg) => { try { if (alive()) return chrome.runtime.sendMessage(msg); stale(); return Promise.reject(new Error("Umbra Mail was updated: reload Gmail")); } catch (e) { return Promise.reject(e); } };

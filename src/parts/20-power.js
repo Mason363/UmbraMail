@@ -39,7 +39,7 @@ function untickGmail() {
   for (const box of m ? $$('tr.zA [role="checkbox"][aria-checked="true"]', m) : []) press(box);
 }
 function markChosen() {
-  for (const el of $$("#qm-view .qm-rows .qm-row")) el.classList.toggle("qm-chosen", chosen.has(el.dataset.id));
+  for (const el of $$("#qm-view .qm-rows .qm-row:not(.qm-leaving *)")) el.classList.toggle("qm-chosen", chosen.has(el.dataset.id));
   ROOT.classList.toggle("qm-choosing", chosen.size > 0);
   invalidate(true);
 }
@@ -63,7 +63,10 @@ function selectionSlot(sel) {
   sel.dataset.sig = sig;
   if (!rows.length) { sel.replaceChildren(); return; }
   const unread = rows.some((r) => r.unread), starred = rows.every((r) => r.starred);
-  sel.replaceChildren(h("div", { class: "qm-selbar", role: "toolbar", "aria-label": "Selected" },
+  // (the bar arrives once; choosing more only changes what's in it)
+  let bar = $(":scope > .qm-selbar", sel);
+  if (!bar) { bar = h("div", { class: "qm-selbar", role: "toolbar", "aria-label": "Selected" }); sel.replaceChildren(bar); }
+  bar.replaceChildren(
     h("span", { text: rows.length === 1 ? "1 selected" : rows.length + " selected" }),
     ib("done", "Done (" + keyLabel(keyFor("done")) + ")", () => bulkDo("done"), "qm-s"),
     ib("trash", (everyFolder === "#drafts" ? "Discard (" : "Delete (") + keyLabel(keyFor("trash")) + ")", () => bulkDo("trash"), "qm-s"),
@@ -74,7 +77,7 @@ function selectionSlot(sel) {
     everyFolder === "#drafts" ? null : ib("archive", "Move to", (e) => bulkPicker(["Move to"], ["Move to"], e.currentTarget), "qm-s"),
     everyFolder === "#drafts" ? null : ib("labels", "Labels", (e) => bulkPicker(["Labels"], ["Label as", "Labels"], e.currentTarget), "qm-s"),
     rows.length < everyList.length ? h("button", { type: "button", class: "qm-selall", onclick: chooseAll }, "Select all " + everyList.length) : null,
-    ib("x", "Clear (esc)", clearChosen, "qm-s")));
+    ib("x", "Clear (esc)", clearChosen, "qm-s"));
 }
 /* drafts are discarded (for good: Gmail keeps no copy), from Gmail's own Drafts list. One with something written
    in it is asked about first. */
@@ -89,7 +92,7 @@ async function discardDrafts(rows, els) {
   // Gmail's Drafts list has to be showing them: back to its first page if it moved on
   if (rows.some((r) => !liveRow(r.id)) && baseHash(hashNow()) === "#drafts") { await firstPage("#drafts"); await until(() => rows.every((r) => liveRow(r.id)), 4000, 80); }
   const live = rows.filter((r) => liveRow(r.id));
-  for (const r of live) hideRow(r, (els || []).find((e) => e && e.dataset.id === r.id) || $(`#qm-view .qm-row[data-id="${CSS.escape(r.id)}"]`));
+  for (const r of live) hideRow(r, (els || []).find((e) => e && e.dataset.id === r.id) || $(`#qm-view .qm-row[data-id="${CSS.escape(r.id)}"]:not(.qm-leaving *)`));
   const done = live.length ? await actMany(live.map((r) => r.id), "discard") : 0;
   // (Gmail didn't offer Discard: the rows come back, and that's said)
   if (live.length && !done) { for (const r of live) gone.delete(r.id); invalidate(true); toast("Gmail didn't let Umbra discard " + (live.length === 1 ? "that draft" : "those drafts") + ". Gmail's own Drafts list can."); return; }
@@ -161,15 +164,22 @@ async function bulkDo(kind, rows) {
   // (another account's mail: through its tab, to exactly the state asked for, not turned over)
   for (const r of rows) if (!mine.includes(r)) rowDoThere(r, kind === "unstar" || kind === "star" ? "star" : kind === "unread" || kind === "read" ? "read" : kind, null, kind === "star" ? true : kind === "unstar" ? false : kind === "unread" ? true : kind === "read" ? false : undefined);
   if (kind === "done" || kind === "trash") {
-    for (const r of rows) hideRow(r, $(`#qm-view .qm-row[data-id="${CSS.escape(r.id)}"]`));
+    for (const r of rows) hideRow(r, $(`#qm-view .qm-row[data-id="${CSS.escape(r.id)}"]:not(.qm-leaving *)`));
     const allLive = mine.every((r) => liveRow(r.id)); // then Gmail does it in one go, and says so (with its own Undo)
     if (mine.length > 3 && !allLive) toast((kind === "done" ? "Putting away " : "Deleting ") + mine.length + "…");
-    const n = await actMany(mine.map((r) => r.id), kind);
-    const ids = mine.map((r) => r.id);
+    // (one at a time out of sight, each would get Gmail's own note: Umbra's one note says it, and its Undo undoes all)
+    if (!allLive) hushToast(/archived|moved to trash|deleted|conversation/i, 4000 + mine.length * 2500);
+    const did = new Set();
+    const n = await actMany(mine.map((r) => r.id), kind, did);
+    if (!allLive) hushToast(/archived|moved to trash|deleted|conversation/i, 1500);
+    // (what didn't happen is back in the list)
+    for (const r of mine) if (!did.has(r.id)) putBack(r, null, "");
+    const ids = mine.map((r) => r.id).filter((id) => did.has(id));
     // (⌘Z puts these back even once Gmail's own note is gone; while it's up, its Undo does. Nothing to put back
     // from deleting forever)
     if (kind === "trash" && binFolder()) { toast("Deleted forever: " + n + (n === 1 ? " conversation." : " conversations.")); return; }
-    const u = pushUndo({ label: BULK_WORDS[kind] + " " + ids.length, after: ids.length === 1 ? (kind === "done" ? "Back in the inbox." : "Back from Trash.") : "All " + ids.length + (kind === "done" ? " are back in the inbox." : " are back from Trash."), undo: () => (kind === "done" ? unDone(ids) : unTrash(ids)) });
+    if (!ids.length) { toast("Couldn't do that just now: Gmail didn't open them."); return; }
+    const u = pushUndo({ label: BULK_WORDS[kind] + " " + ids.length, ids, after: ids.length === 1 ? (kind === "done" ? "Back in the inbox." : "Back from Trash.") : "All " + ids.length + (kind === "done" ? " are back in the inbox." : " are back from Trash."), undo: () => (kind === "done" ? unDone(ids) : unTrash(ids)) });
     if (allLive && n === rows.length) return; // (Gmail said so itself, with its Undo)
     toast(BULK_WORDS[kind] + ": " + (n === rows.length ? n : n + " of " + rows.length) + (n === 1 ? " conversation." : " conversations."), undoAct(u));
     return;
@@ -200,8 +210,9 @@ function listToolbar(act, titles) {
   return null;
 }
 const BULK_GMAIL = { done: ["7", ["Archive"]], trash: ["10", ["Delete"]], read: ["1", ["Mark as read"]], unread: ["2", ["Mark as unread"]], discard: ["", ["Discard drafts", "Discard draft", "Delete"]] };
-async function actMany(ids, kind) {
+async function actMany(ids, kind, done) {
   let n = 0;
+  done = done || new Set(); // (each one that really happened)
   const want = new Set(ids), handled = new Set();
   const live = ids.map((id) => [id, liveRow(id)]).filter(([, r]) => r);
   const ticked = (row) => { const box = $("[role=checkbox]", row); return box && box.getAttribute("aria-checked") === "true"; };
@@ -212,7 +223,7 @@ async function actMany(ids, kind) {
     for (const [, row] of live) if (!ticked(row)) press($("[role=checkbox]", row));
     // Gmail shows its buttons for what's ticked a moment after
     const b = await until(() => listToolbar(BULK_GMAIL[kind][0], BULK_GMAIL[kind][1]), 1500, 50);
-    if (b) { press(b); for (const [id] of live) handled.add(id); n += live.length; await wait(450); }
+    if (b) { press(b); for (const [id] of live) { handled.add(id); done.add(id); } n += live.length; await wait(450); }
     else for (const [, row] of live) if (ticked(row)) press($("[role=checkbox]", row));
   } else if (live.length) {
     // starring: each row's own star
@@ -221,12 +232,15 @@ async function actMany(ids, kind) {
       if (!st) continue;
       if (st.classList.contains("T-KT-Jp") !== (kind === "star")) { press(st); await wait(60); } // (starred, in any language)
       handled.add(id);
+      done.add(id);
       n++;
     }
   }
   for (const id of ids) {
     if (handled.has(id) || kind === "discard") continue; // (a draft can't be opened out of sight)
     await until(() => !ghost, 6000, 50);
+    const row = [...sources.values()].map((x) => x.rows && x.rows.get(id)).find(Boolean) || goneRows.get(id);
+    const wasUnread = !!(row && row.unread);
     await ghostThread({ id }, async () => {
       if (kind === "star" || kind === "unstar") {
         const stars = $$('.T-KT[aria-label], [aria-label="Not starred" i], [aria-label="Starred" i]', gmailMain());
@@ -234,11 +248,14 @@ async function actMany(ids, kind) {
         const on = st && st.classList.contains("T-KT-Jp");
         if (st && on !== (kind === "star")) press(st);
         n++;
-      } else if (kind === "read") n++; // opening it read it
+        done.add(id);
+        // (opening it read it: unread it stays)
+        if (wasUnread) { await wait(250); const u = gmailToolbar("2", ["Mark as unread"]); if (u) press(u); }
+      } else if (kind === "read") { n++; done.add(id); } // opening it read it
       else {
         const [act, titles] = BULK_GMAIL[kind];
         const b = gmailToolbar(act, titles);
-        if (b) { press(b); n++; }
+        if (b) { press(b); n++; done.add(id); }
       }
       await wait(300);
     });
@@ -249,7 +266,7 @@ async function actMany(ids, kind) {
 
 /* ---- g, then a letter ---- */
 const CHORDS = [
-  ["i", "Inbox", () => go("#inbox")],
+  ["i", "Inbox", () => { if (paperOn) closePaper(); go("#inbox"); }],
   ["p", "The paper", () => openPaper(), () => cp().paper],
   ["s", "Starred", () => go("#starred")],
   ["l", "Later", () => go("#snoozed")],
@@ -306,7 +323,7 @@ window.addEventListener("keydown", (e) => {
   const mod = IS_MAC ? e.metaKey : e.ctrlKey;
   if (e.key === (IS_MAC ? "Meta" : "Control")) { ROOT.classList.add("qm-modheld"); return; }
   if (!mod || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || document.getElementById("qm-panel-scrim")) return;
-  if (typing(e.target)) return; // (writing: the browser's own ⌘1–9, never leaving the page under your words)
+  if (typing(e.target) && !(palette && e.target === palette.input)) return; // (writing: the browser's own ⌘1–9, never leaving the page under your words; ⌘K's own field is Umbra's)
   const it = folderLinks()[Number(e.key) - 1];
   if (!it) return;
   e.preventDefault();
@@ -314,7 +331,7 @@ window.addEventListener("keydown", (e) => {
   ROOT.classList.remove("qm-modheld");
   closeSide();
   closePalette();
-  if (it[4]) it[4](); else go(it[1]);
+  if (it[4]) it[4](); else { if (paperOn && it[1] === "#inbox") closePaper(); go(it[1]); }
 }, true);
 window.addEventListener("keyup", (e) => { if (e.key === (IS_MAC ? "Meta" : "Control") || !(IS_MAC ? e.metaKey : e.ctrlKey)) ROOT.classList.remove("qm-modheld"); }, true);
 window.addEventListener("blur", () => ROOT.classList.remove("qm-modheld"));
@@ -445,6 +462,10 @@ function paletteSelected() {
   return [it("Done", "done", () => bulkDo("done"), "archive"), it("Delete", "trash", () => bulkDo("trash"), "trash bin remove"),
     unread ? it("Mark read", "mailopen", () => bulkDo("read")) : it("Mark unread", "allmail", () => bulkDo("unread")),
     it(starred ? "Unstar" : "Star", "starred", () => bulkDo(starred ? "unstar" : "star")),
+    // (Gmail's own pickers, under the bar's own buttons)
+    it("Later", "later", () => { const b = $('#qm-view .qm-selbar [aria-label^="Later" i]:not(.qm-leaving *)'); if (b) bulkPicker(["Snooze"], ["Snooze"], b); }, "snooze"),
+    ...(everyFolder === "#drafts" ? [] : [it("Move to", "archive", () => { const b = $('#qm-view .qm-selbar [aria-label="Move to"]:not(.qm-leaving *)'); if (b) bulkPicker(["Move to"], ["Move to"], b); }, "folder"),
+      it("Labels", "labels", () => { const b = $('#qm-view .qm-selbar [aria-label="Labels"]:not(.qm-leaving *)'); if (b) bulkPicker(["Labels"], ["Label as", "Labels"], b); }, "label tag")]),
     it("Clear selection", "x", clearChosen, "deselect none")];
 }
 setTimeout(() => { if (recallOn()) recallOpen(); }, 4000);

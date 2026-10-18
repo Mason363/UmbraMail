@@ -60,6 +60,15 @@ test("tone and attachments", () => {
   assert.equal(L.toneOf("Thanks! See you at the NASA event, ASAP is fine.").heated, false);
   assert.equal(L.toneOf("Great work!! Really.").heated, false, "one strong mark alone isn't heat");
   assert.equal(L.mentionsAttachment("I've attached the PDF."), true);
+  assert.equal(L.mentionsAttachment("Thanks for the attachment!"), false, "someone else's attachment");
+  assert.equal(L.toneOf("In the worst case we push to Monday.").heated, false, "a mild word alone isn't heat");
+  assert.equal(L.toneOf("The files were just lying around.").heated, false);
+  assert.equal(L.findPromises("Sarah will send you the invoice tomorrow.", Date.UTC(2026, 9, 16, 15)).length, 0, "someone else's promise");
+  assert.equal(L.findPromises("We will send the forms by Friday.", Date.UTC(2026, 9, 16, 15)).length, 1);
+  assert.equal(L.findPromises("Will send it over tomorrow.", Date.UTC(2026, 9, 16, 15)).length, 1);
+  assert.equal(L.findPromises("I'll bring the deck 2 copies.", Date.UTC(2026, 9, 16, 15))[0].due, null, "deck 2 isn't Dec 2");
+  assert.equal(L.findPromises("I'll do 1/2 of it now.", Date.UTC(2026, 9, 16, 15))[0].due, null, "a fraction isn't a date");
+  assert.ok(L.findPromises("I'll send it by 11/3.", Date.UTC(2026, 9, 16, 15))[0].due, "by 11/3 is a date");
   assert.equal(L.mentionsAttachment("See you soon"), false);
   assert.equal(L.mentionsAttachment("Thanks!\n\nOn Tue, Oct 7, 2026, Jake wrote:\n> see attached"), false, "only your own words count");
 });
@@ -76,6 +85,17 @@ test("where links go", () => {
   const sg = L.realLink("https://u123.ct.sendgrid.net/ls/click?upn=xyz&url=https%3A%2F%2Fshop.com%2Fdeal");
   assert.equal(sg.host, "shop.com");
   assert.equal(sg.via, "SendGrid");
+  // any other site's ?url= is that site's own: the link goes there, and says so
+  const evil = L.realLink("https://evil.example/go?url=https://www.paypal.com/signin");
+  assert.equal(evil.host, "evil.example");
+  assert.equal(evil.via, "");
+  assert.equal(L.realLink("https://www.facebook.com/sharer/sharer.php?u=https://news.com/a").host, "facebook.com");
+  // plain links to these sites aren't counters
+  for (const x of ["https://www.salesforce.com/pricing", "https://blog.hubspot.com/marketing", "https://img.shields.io/badge/x"]) assert.equal(L.realLink(x).via, "", x);
+  // counters with the destination in them, and without
+  assert.equal(L.realLink("https://email.mg.example.com/c/abc?url=https%3A%2F%2Fexample.org%2Fx").host, "example.org");
+  assert.equal(L.realLink("https://email.mg.example.com/c/abc").opaque, true);
+  assert.equal(L.realLink("https://substack.com/redirect/abc?j=x").via, "Substack");
   assert.equal(L.realLink("mailto:a@b.com").mail, "a@b.com");
   assert.equal(L.textHost("www.PayPal.com"), "paypal.com");
   assert.equal(L.textHost("Click here"), "");
@@ -98,9 +118,20 @@ test("tracking pixels", () => {
   assert.equal(L.trackerOf("https://u1.ct.sendgrid.net/wf/open?upn=abc", 0, 0), "SendGrid");
   assert.equal(L.trackerOf("https://example.com/logo.png", 120, 40), "");
   assert.equal(L.trackerOf("https://example.com/spacer.gif", 1, 1), "a tracker");
+  assert.equal(L.trackerOf("https://example.com/divider.png", 600, 1), "", "a divider is a picture");
   assert.equal(L.trackerOf("https://cdn.example.com/hero.jpg", 600, 300), "");
   assert.equal(L.trackerOf("https://example.com/open?id=abc", 0, 0), "a tracker");
   assert.equal(L.trackerOf("https://example.com/icons/open.png", 24, 24), "", "an icon called open is a picture");
+  // a service's own pictures (responsive templates write no size) are pictures, not trackers
+  assert.equal(L.trackerOf("https://cdn2.hubspot.net/hubfs/123/hero.png", 0, 0), "");
+  assert.equal(L.trackerOf("https://gallery.mailchimp.com/abc/images/photo.jpg", 0, 0), "");
+  assert.equal(L.trackerOf("https://image.exacttarget.com/lib/abc/m/1/hero.jpg", 0, 0), "");
+  assert.equal(L.trackerOf("https://firebasestorage.googleapis.com/v0/b/app.appspot.com/o/images%2Fphoto.jpg?alt=media", 0, 0), "");
+  // …and their open-tracking addresses still are, sized or not
+  assert.equal(L.trackerOf("https://track.hubspot.com/e2t/to/abcdef", 0, 0), "HubSpot");
+  assert.equal(L.trackerOf("https://mylist.us1.list-manage.com/track/open.php?u=1", 0, 0), "Mailchimp");
+  assert.equal(L.trackerOf("https://u1.ct.sendgrid.net/wf/open.gif?upn=abc", 0, 0), "SendGrid");
+  assert.equal(L.trackerOf("https://email.mg.example.com/o/eJwFwUEKgCAQBMDXuLNYbEuE", 0, 0), "Mailgun");
 });
 
 test("templates", () => {
@@ -149,6 +180,8 @@ test("search words: operators dropped, phrases kept, exclusions ignored", () => 
   assert.deepEqual([...L.findTerms("subject:(quarterly report) has:attachment")].sort(), ["quarterly", "report"]);
   assert.deepEqual([...L.findTerms("invoice OR receipt in:inbox")].sort(), ["invoice", "receipt"]);
   assert.deepEqual([...L.findTerms("is:unread label:school")], []);
+  assert.deepEqual([...L.findTerms("cc:me")], [], "me is you, not a word to find");
+  assert.deepEqual([...L.findTerms("from:me budget")], ["budget"]);
   assert.deepEqual([...L.findTerms("a 2026")], ["2026"]);
   assert.equal(L.findRe("is:starred"), null);
 });
@@ -185,4 +218,27 @@ test("search words: grouping and other scripts", () => {
   assert.deepEqual([...L.findTerms("猫")], ["猫"]);
   const en = L.findRe("art");
   assert.ok(!en.test("start"));
+});
+
+test("links that ask for a new message", () => {
+  const plain = (d) => d && JSON.parse(JSON.stringify(d));
+  assert.deepEqual(plain(L.composeLink("mailto:ana@example.com")), { to: ["ana@example.com"], cc: [], bcc: [], subject: "", text: "", u: null, email: "" });
+  const m = plain(L.composeLink("mailto:ana@example.com,bo@example.com?cc=cy@example.com&BCC=di@example.com&subject=Lunch%20on%20Friday&body=Hi%2C%0D%0A2+2%3D4"));
+  assert.deepEqual(m.to, ["ana@example.com", "bo@example.com"]);
+  assert.deepEqual(m.cc, ["cy@example.com"]);
+  assert.deepEqual(m.bcc, ["di@example.com"]);
+  assert.equal(m.subject, "Lunch on Friday");
+  assert.equal(m.text, "Hi,\n2+2=4", "a + in a mailto: link is a plus");
+  const g = plain(L.composeLink("https://mail.google.com/mail/u/1/?view=cm&fs=1&to=ana@example.com&su=Hello+there&body=Line+one"));
+  assert.deepEqual([g.to, g.subject, g.text, g.u], [["ana@example.com"], "Hello there", "Line one", 1]);
+  const t = plain(L.composeLink("https://mail.google.com/mail/?tf=cm&fs=1&to=mailto:ana@example.com&authuser=me@example.com"));
+  assert.deepEqual([t.to, t.u, t.email], [["ana@example.com"], null, "me@example.com"]);
+  const h = plain(L.composeLink("https://mail.google.com/mail/?extsrc=mailto&url=" + encodeURIComponent("mailto:ana@example.com?subject=Hi%20you&cc=bo@example.com")));
+  assert.deepEqual([h.to, h.cc, h.subject], [["ana@example.com"], ["bo@example.com"], "Hi you"]);
+  assert.equal(L.composeLink("mailto:"), null, "nothing to fill in");
+  assert.equal(L.composeLink("https://mail.google.com/mail/u/0/?view=cm&fs=1&tf=1"), null);
+  assert.equal(L.composeLink("https://mail.google.com/mail/u/0/?view=cm&draft=r123&to=a@b.co"), null, "a draft opens as Gmail draws it");
+  assert.equal(L.composeLink("https://mail.google.com/mail/u/0/#inbox"), null);
+  assert.equal(L.composeLink("https://example.com/?view=cm&to=a@b.co"), null);
+  assert.equal(L.composeLink("https://example.com/contact"), null);
 });

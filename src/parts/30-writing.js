@@ -42,7 +42,7 @@ function showMovingIfAny() {
    Just before a message goes, three plain questions, each only when it applies (Settings › Writing):
    late at night, it can wait for the morning (Gmail's own Schedule send, 8:00 AM); words that read heated are
    pointed out; and a reply that mentions an attachment but has none says so. Nothing is asked otherwise. */
-const WRITE_DEFAULTS = { quiet: true, quietFrom: 22 * 60, quietTo: 6 * 60, tone: true, attach: true, promises: true };
+const WRITE_DEFAULTS = { quiet: true, quietFrom: 22 * 60, quietTo: 6 * 60, tone: true, attach: true, promises: true, linkCompose: true };
 const wp = () => Object.assign({}, WRITE_DEFAULTS, prefs.write);
 function setWrite(patch) { prefs.write = Object.assign({}, prefs.write, patch); savePrefs(); }
 /* a question with a few answers (the same look as Umbra's confirm) */
@@ -66,7 +66,7 @@ function sendConcerns(box, isReplyBar) {
   const w = wp(), ed = $(".editable", box);
   const words = ed ? ownText(ed) : "";
   const out = [];
-  if (w.attach && isReplyBar && mentionsAttachment(words) && !$$(".dL", box).length) out.push("attach");
+  if (w.attach && isReplyBar && mentionsAttachment(words) && !$$(".dL, .dQ", box).length && !(ed && $$("img", ed).some((img) => !img.closest(".gmail_quote, .gmail_quote_container, .gmail_signature, [data-smartmail='gmail_signature']")))) out.push("attach");
   if (w.tone && toneOf(words).heated) out.push("tone");
   if (w.quiet && inHours(Date.now(), w.quietFrom, w.quietTo)) out.push("quiet");
   return { out, words };
@@ -92,7 +92,8 @@ async function considerSend(box, isReplyBar, sendNow) {
 }
 /* Gmail's own Schedule send: the arrow beside Send, "Schedule send", and its morning suggestion */
 async function scheduleSend(box) {
-  const arrow = $$('[aria-label^="More send options" i], .T-I.hG', box).find(visible);
+  const arrows = $$('[aria-label^="More send options" i], .T-I.hG', box);
+  const arrow = arrows.find(visible) || arrows[0];
   if (!arrow) return false;
   press(arrow);
   const item = await until(() => $$('[role="menuitem"]').find((x) => visible(x) && /schedule send/i.test(text(x))), 2000, 40);
@@ -101,7 +102,7 @@ async function scheduleSend(box) {
   // Gmail's picker (not the message window, which mentions "Schedule send" too)
   const pick = await until(() => $$('[role="dialog"], [role="alertdialog"]').find((d) => visible(d) && !d.matches(".nH.Hd") && /^\s*schedule send/i.test(d.innerText || "")), 3000, 40);
   if (!pick) return false;
-  const opt = $$("[role=menuitem], [role=option], [role=button], [tabindex]", pick).filter(visible).find((x) => /morning/i.test(text(x)) && /\b8:00/.test(text(x)) && text(x).length < 60);
+  const opt = $$("[role=menuitem], [role=option], [role=button], [tabindex]", pick).filter(visible).find((x) => /morning/i.test(text(x)) && /\b0?8[:.]00/.test(text(x)) && text(x).length < 60);
   if (!opt) { const cancel = $$("button, [role=button]", pick).find((x) => /^cancel$/i.test(text(x))); if (cancel) press(cancel); return false; }
   press(opt);
   return true;
@@ -145,16 +146,17 @@ function templateVars(box) {
   const day = (n) => new Date(Date.now() + n * 86400000).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
   return { name: personName(email, name) || name, me: myName(), today: day(0), tomorrow: day(1), company, subject: (($("input[name='subjectbox']", box) || {}).value || "").trim() };
 }
-async function insertTemplate(box, tpl) {
+async function insertTemplate(box, tpl, at) {
   const v = templateVars(box);
   const subj = $("input[name='subjectbox']", box);
   if (tpl.subject && subj && !subj.value.trim()) { subj.focus(); document.execCommand("insertText", false, fillTemplate(tpl.subject, v)); }
   const ed = $(".editable", box);
   if (!ed) return;
   ed.focus();
-  // at the caret if it's in the message, otherwise at the start of what you've written
+  // where the caret was in the message, otherwise at the start of what you've written
   const sel = window.getSelection();
-  if (!sel.rangeCount || !ed.contains(sel.anchorNode)) { const r = document.createRange(); r.setStart(ed, 0); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
+  if (at && at.startContainer.isConnected && ed.contains(at.startContainer)) { sel.removeAllRanges(); sel.addRange(at); }
+  else if (!sel.rangeCount || !ed.contains(sel.anchorNode)) { const r = document.createRange(); r.setStart(ed, 0); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
   fillTemplate(tpl.body, v).replace(/\r/g, "").split("\n").forEach((line, i) => { if (i) document.execCommand("insertParagraph"); if (line) document.execCommand("insertText", false, line); });
 }
 function saveAsTemplate(box) {
@@ -171,6 +173,9 @@ function openTemplates(box) {
   const old = document.getElementById("qm-tpl");
   if (old) { old.remove(); return; }
   const list = templates();
+  // (where the caret is in the message right now: the template goes there)
+  const sel0 = window.getSelection(), ed0 = $(".editable", box);
+  const at = sel0 && sel0.rangeCount && ed0 && ed0.contains(sel0.anchorNode) ? sel0.getRangeAt(0).cloneRange() : null;
   const input = h("input", { type: "text", placeholder: list.length ? "Find a template" : "No templates yet", "aria-label": "Find a template", autocomplete: "off", spellcheck: "false" });
   const items = h("div", { class: "qm-tplist", role: "listbox" });
   const card = h("div", { id: "qm-tpl", role: "dialog", "aria-label": "Templates" }, h("div", { class: "qm-tpin" }, icon("paper"), input, h("kbd", { text: "esc" })), items);
@@ -179,7 +184,7 @@ function openTemplates(box) {
   const run = (it) => { close(); it.run(); };
   const draw = () => {
     const q = input.value.trim().toLowerCase();
-    shown = list.filter((t) => !q || (t.name + " " + t.body).toLowerCase().includes(q)).map((t) => ({ label: t.name || t.body.slice(0, 40), sub: t.body.replace(/\s+/g, " ").slice(0, 80), run: () => insertTemplate(box, t) }));
+    shown = list.filter((t) => !q || (t.name + " " + t.body).toLowerCase().includes(q)).map((t) => ({ label: t.name || t.body.slice(0, 40), sub: t.body.replace(/\s+/g, " ").slice(0, 80), run: () => insertTemplate(box, t, at) }));
     shown.push({ label: "Save this message as a template", sub: "", run: () => saveAsTemplate(box), quiet: true }, { label: "Manage templates", sub: "", run: () => openPanel("writing"), quiet: true });
     active = Math.min(active, shown.length - 1);
     items.replaceChildren(...shown.map((it, i) => {
@@ -195,20 +200,20 @@ function openTemplates(box) {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); active = (active + (e.key === "ArrowDown" ? 1 : shown.length - 1)) % shown.length; draw(); }
     else if (e.key === "Enter") { e.preventDefault(); if (shown[active]) run(shown[active]); }
-    else if (e.key === "Escape") { e.preventDefault(); close(); const ed = $(".editable", box); if (ed) ed.focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); close(); const ed = $(".editable", box); if (ed) { ed.focus(); if (at && at.startContainer.isConnected) { const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(at); } } }
   });
   const away = (e) => { if (!card.contains(e.target)) close(); };
   document.body.appendChild(card);
+  draw();
   // over the message it's for
   const r = box.getBoundingClientRect(), c = card.getBoundingClientRect();
   card.style.left = Math.round(Math.max(12, Math.min(r.left + 16, window.innerWidth - c.width - 12))) + "px";
   card.style.top = Math.round(Math.max(12, Math.min(r.top + 56, window.innerHeight - c.height - 12))) + "px";
-  draw();
   input.focus();
   setTimeout(() => window.addEventListener("pointerdown", away, true), 0);
 }
 window.addEventListener("keydown", (e) => {
-  if (!enabled || !e.isTrusted || introOn || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key !== ";") return;
+  if (!enabled || !e.isTrusted || introOn || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key !== ";" || document.getElementById("qm-panel-scrim")) return;
   let box = writingBox(e.target);
   if (!box) {
     // the reply bar's own box: Gmail's editor takes over first
@@ -250,15 +255,16 @@ function openPromises() {
   if (!wp().promises) return [];
   const now = Date.now();
   // only real commitments: with a day to them, to someone else ("I'll look into it" isn't one to keep track of)
-  return promisesFor().list.filter((p) => !dismissed.has(p.key) && p.due && p.due.t > now - 3 * 86400000 && p.due.t < now + 10 * 86400000 && !/^(me|myself)$/i.test(String(p.to || "").trim()))
+  return promisesFor().list.filter((p) => !dismissed.has(p.key) && p.due && p.due.t > now - 3 * 86400000 && p.due.t < now + 10 * 86400000 && !!promiseTo(p))
     .sort((a, b) => ((a.due ? a.due.t : Infinity) - (b.due ? b.due.t : Infinity)) || b.sentAt - a.sentAt).slice(0, 3);
 }
+const promiseTo = (p) => String(p.to || "").split(/,\s*/).map((x) => x.trim()).filter((x) => x && !/^(me|myself)$/i.test(x))[0] || "";
 function promiseLines() {
   const list = openPromises();
   if (!list.length) return null;
   return h("div", { class: "qm-promises" }, ...list.map((p) => {
     const line = h("div", { class: "qm-promise" },
-      h("span", { class: "qm-prwho", text: p.to ? "To " + p.to.split(",")[0] : "You said" }),
+      h("span", { class: "qm-prwho", text: promiseTo(p) ? "To " + promiseTo(p) : "You said" }),
       h("p", { text: p.text }),
       p.due ? h("span", { class: "qm-prdue" + (p.due.t < Date.now() ? " qm-late" : ""), text: dueLabel(p.due) }) : null,
       h("button", { type: "button", class: "qm-prdone", "aria-label": "Done", title: "Done", onclick: () => collapseAway(line, () => { dismiss(p.key); invalidate(true); }) }, icon("done")));
@@ -288,6 +294,8 @@ function writingPage(redraw) {
     h("span", { class: "qm-times" }, timeIn(w.quietFrom, (m) => { setWrite({ quietFrom: m }); redraw(); }, "From"), h("span", { class: "qm-to", text: "to" }), timeIn(w.quietTo, (m) => { setWrite({ quietTo: m }); redraw(); }, "Until"))));
   sec.append(sw("tone", "Point out heated words", "Words that come across strongly in writing are named before you send, once."),
     sw("attach", "Notice a missing attachment", "In the reply bar: you mention a file, and nothing's attached. (Gmail asks the same in windows.)"),
+    h("h3", { text: "Links" }),
+    sw("linkCompose", "Email links open a window here", "A link that writes to someone (on a website, or in an email) opens a new message in your inbox, filled in, instead of Gmail's full-page one."),
     h("h3", { text: "Promises" }),
     sw("promises", "Keep track of what you said you'd do", "“I'll send it by Friday” in mail you sent becomes a quiet line at the top of the inbox until you mark it done. Read on this computer, from your sent mail of the last two weeks."));
   // templates
@@ -320,7 +328,7 @@ function scheduledLine(main) {
    which Umbra's window changes, so near the window's edge they ran past it and were cut off. They're nudged
    back inside, every time one opens. */
 function keepMenusIn(box) {
-  if (!box || !box.isConnected) return;
+  if (!enabled || !box || !box.isConnected) return;
   const d = box.getBoundingClientRect();
   for (const m of $$('.J-M, [role="menu"]', box)) {
     if (!visible(m) || m.closest(".qm-menu")) continue;

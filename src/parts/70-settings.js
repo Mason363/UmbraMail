@@ -4,13 +4,72 @@
    - The welcome: on a first run, a few choices (and AI stays off until you say yes).
    - Self-check: when Gmail changes something Umbra relies on, it says so and offers plain Gmail. */
 
-/* plain Gmail in this tab, and back (never kept: the next Gmail page has Umbra again) */
-function plainGmail(on) {
+/* plain Gmail in this tab, and back (never kept: the next Gmail page has Umbra again). Off means nothing of Umbra's
+   is left: its stylesheet stops applying, what it drew is hidden, whatever it had open closes, Gmail's windows get
+   back their own header, and it stops acting (no keys, no timers, nothing done for Umbra in other tabs).
+   `why` "stale": the Chrome extension was updated or turned off, and this copy can't come back without a reload. */
+let offWhy = "";
+function plainGmail(on, why) {
+  if (on && !enabled) { if (why && offWhy !== why) { offWhy = why; offNote(); } return; }
+  if (!on && (enabled || offWhy === "stale")) return;
   enabled = !on;
+  offWhy = on ? why || "asked" : "";
+  if (on) {
+    for (const fn of [closeMenu, closeSide, closePalette, closeFileView, () => closeFullMsg(true), hideDrop, () => { if (introStop) introStop(); }]) { try { fn(); } catch (e) { /* already gone */ } }
+    for (const id of ["qm-panel-scrim", "qm-keys-scrim", "qm-confirm-scrim", "qm-pal-scrim", "qm-tpl", "qm-person", "qm-chord", "qm-check", "qm-toast", "qm-gtoast", "qm-drop"]) { const el = document.getElementById(id); if (el) el.remove(); }
+    const c = composerOf();
+    if (c) detachBar(c);
+    // Gmail's writing windows, as Gmail draws them: Umbra's header, its AI line and its file pictures go
+    for (const el of $$(".qm-whead, .qm-aibar, .qm-attpv")) el.remove();
+    for (const el of $$("[data-qm-att]")) delete el.dataset.qmAtt;
+    for (const ip of $$(".ip")) { ip.classList.remove("qm-float", "qm-bar", "qm-tucked", "qm-closed", "qm-full"); delete ip.dataset.qmFloat; }
+    for (const d of $$('.nH.Hd[role="dialog"]')) { d.style.clipPath = ""; d.style.transform = ""; d.style.transition = ""; d.style.opacity = ""; d.style.pointerEvents = ""; delete d.dataset.qmGone; }
+    for (const s of $$(".qm-morph")) s.remove();
+    hideView();
+    // (other tabs stop counting on this one to read or act for them)
+    const e = accountEmail();
+    if (e) store.set("live:" + e, { at: 0, tab: TAB_ID });
+  }
+  if (umbraStyle) umbraStyle.disabled = !enabled;
+  ROOT.toggleAttribute("data-umbra-off", !enabled);
+  offStyle();
   applyPrefs();
+  applyLook();
+  applyColors();
   applyFinish();
-  if (on) { hideView(); toast("Plain Gmail in this tab. Reload to bring Umbra back.", { label: "Bring it back", run: () => plainGmail(false) }); }
-  invalidate(true);
+  applyUserCss();
+  calmTitle();
+  offNote();
+  if (enabled) { heartbeat(); renderAccounts(); keyHints(); everyKeys = ["!redraw"]; invalidate(true); }
+}
+/* while off: Umbra's own things stay out of sight (with its stylesheet off they'd show unstyled) */
+function offStyle() {
+  let st = document.getElementById("umbra-off-style");
+  if (!st) {
+    st = document.createElement("style");
+    st.id = "umbra-off-style";
+    st.textContent = 'html[data-umbra-off] :is([id^="qm-"], .qm-menu, .qm-whead, .qm-aibar, .qm-attpv, .qm-morph, .qm-spark, .qm-flyemoji, .qm-sketch, .qm-m-src, .qm-msnap, .qm-plate) { display: none !important; }';
+    (document.head || ROOT).appendChild(st);
+  }
+}
+/* the one thing Umbra shows while it's off: a small note to bring it back (styled on its own, Gmail's way) */
+function offNote() {
+  const old = document.getElementById("umbra-off");
+  if (old) old.remove();
+  if (enabled || !document.body) return;
+  const stale = offWhy === "stale";
+  const btn = (label, run) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.style.cssText = "all:unset;cursor:pointer;font-weight:500;padding:6px 10px;border-radius:8px;color:#a8c7fa"; b.addEventListener("click", run); return b; };
+  const note = document.createElement("div");
+  note.id = "umbra-off";
+  note.setAttribute("role", "status");
+  note.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:6px;padding:8px 8px 8px 18px;border-radius:12px;background:#1f1f1f;color:#e3e3e3;font:400 14px/20px 'Google Sans',Roboto,Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.28);max-width:calc(100vw - 32px)";
+  const words = document.createElement("span");
+  words.textContent = stale ? "Umbra was updated or turned off in Chrome, so it's off in this tab." : "Plain Gmail in this tab.";
+  const close = btn("✕", () => note.remove());
+  close.setAttribute("aria-label", "Dismiss");
+  note.append(words, stale ? btn("Reload", () => location.reload()) : btn("Bring Umbra back", () => plainGmail(false)), close);
+  document.body.appendChild(note);
+  if (!stale) setTimeout(() => { if (note.isConnected) note.remove(); }, 10000);
 }
 
 /* ---- your CSS ---- */
@@ -24,14 +83,14 @@ function applyUserCss() {
 
 /* ---- settings as a file ---- */
 // what a settings file holds: your choices (never caches, API keys, or anything about your mail)
-const SETTING_KEYS = ["prefs3", "contacts", "dismissed2"];
+const SETTING_KEYS = ["prefs3", "contacts", "dismissed2", "about-mine"];
 // a look is only these (a look file passed between people can't touch anything else: AI, sheets, rules, shortcuts)
 const LOOK_KEYS = ["theme", "bg", "soft", "size", "density", "lines", "uiFont", "readFont", "readWidth", "glass", "grain", "accentFollow", "motion", "css"];
 function settingsFile(lookOnly) {
   if (lookOnly) {
     const pick = LOOK_KEYS;
     const look = {};
-    for (const k of pick) if (prefs[k] !== undefined) look[k] = k === "bg" ? Object.assign({}, prefs.bg, { palette: undefined }) : prefs[k];
+    for (const k of pick) if (prefs[k] !== undefined) look[k] = k === "bg" ? Object.assign({}, prefs.bg, { palette: undefined, iw: undefined, ih: undefined, lum: undefined, lumLo: undefined, x: undefined, y: undefined, zoom: undefined }) : prefs[k];
     return { umbra: "look", version: VERSION, look };
   }
   const data = {};
@@ -71,7 +130,8 @@ async function importSettings(redraw) {
   } else if (file.umbra === "settings" && file.data && typeof file.data === "object") {
     const ok = await confirmBox({ title: "Use these settings?", body: ["Your settings here are replaced with the ones in the file (from " + (file.at ? new Date(file.at).toLocaleDateString() : "another computer") + "). Your mail isn't touched."], ok: "Use them" });
     if (!ok) return;
-    for (const k of SETTING_KEYS) if (file.data[k] != null) store.set(k, file.data[k]); else store.del(k);
+    // (a file from before a key was part of it leaves that one as it is here)
+    for (const k of SETTING_KEYS) if (file.data[k] != null) store.set(k, file.data[k]); else if (k in file.data) store.del(k);
     // everything in this tab starts again from them (names, dismissals and settings, exactly as in the file)
     store.set("welcomed", true);
     leaving = true;
@@ -96,7 +156,7 @@ function flagRows() {
   for (const [k, v] of Object.entries(prefs).sort((a, b) => a[0].localeCompare(b[0]))) {
     if (/^mig\d+$/.test(k)) continue;
     if (k in FLAG_DEFAULTS) { const d = FLAG_DEFAULTS[k](); for (const [s2, dv] of Object.entries(d)) add(k + "." + s2, (v || {})[s2] !== undefined ? v[s2] : dv, dv); continue; }
-    add(k, v, undefined);
+    add(k, v, k in PREF_DEFAULTS ? JSON.parse(JSON.stringify(PREF_DEFAULTS[k])) : undefined); // (a copy: Reset never hands out the defaults themselves)
   }
   for (const [k, d] of Object.entries(FLAG_DEFAULTS)) if (!(k in prefs)) for (const [s2, dv] of Object.entries(d())) add(k + "." + s2, dv, dv);
   return out;
@@ -166,9 +226,9 @@ function flagsPage(redraw) {
 }
 
 /* ---- self-check: what Umbra needs from Gmail's page, looked for now and then ---- */
-let checkMiss = 0;
+let checkMiss = 0, checkHidden = false;
 function selfCheck() {
-  if (!enabled || document.hidden || peeking || ghost || aiPeeking) return;
+  if (!enabled || checkHidden || document.hidden || peeking || ghost || aiPeeking) return;
   const issues = [];
   if (document.readyState === "complete" && Date.now() - performance.timing.navigationStart > 20000) {
     if (!gmailMain()) issues.push("Gmail's main view");
@@ -181,7 +241,7 @@ function selfCheck() {
   if (old) return;
   const bar = h("div", { id: "qm-check", role: "alert" }, h("span", { text: "Gmail looks different today: Umbra Mail can't find " + issues.join(" or ") + ". Things may not work as they should." }),
     h("button", { type: "button", onclick: () => { bar.remove(); plainGmail(true); } }, "Plain Gmail"),
-    h("button", { type: "button", onclick: () => { bar.remove(); checkMiss = 0; } }, "Hide"));
+    h("button", { type: "button", onclick: () => { bar.remove(); checkMiss = 0; checkHidden = true; } }, "Hide"));
   document.body.appendChild(bar);
 }
 setInterval(selfCheck, 15000);

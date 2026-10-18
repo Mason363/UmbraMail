@@ -30,7 +30,7 @@ const PRESSABLE = "button, [role=button], .qm-minibtn, .qm-fchip, .qm-react, #qm
 const PRESS_IN = "#qm-view, #qm-side, #qm-panel, #qm-pal-scrim, #qm-rail, #qm-dock, .qm-menu, #qm-toast, #qm-gtoast, #qm-confirm-scrim, #qm-fview-scrim, .qm-whead, #qm-keys-scrim, #qm-person, #qm-tpl, #qm-intro, #qm-burger, #qm-chip, .dC";
 let pressedEl = null;
 document.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !e.isPrimary || prefersStill()) return;
+  if (!enabled || e.button !== 0 || !e.isPrimary || prefersStill()) return;
   const el = e.target && e.target.closest && e.target.closest(PRESSABLE);
   if (!el || el.disabled || el.getAttribute("aria-disabled") === "true" || !el.closest(PRESS_IN)) return;
   const w = el.offsetWidth, hgt = el.offsetHeight;
@@ -97,16 +97,39 @@ function staggerIn(box, max = 14) {
 /* ---- screens: a conversation comes in from the right, and goes back the way it came ---- */
 const LISTY = /^(stream|find|files|subs|todos|paper|preview|lost|ask)$/, MAILY = /^(thread|reading|opening)$/;
 let screenHow = { how: "", at: 0 };
+function screenHowOf(from, to) {
+  if (!from) return "fade";
+  if (LISTY.test(from) && MAILY.test(to)) return "push";
+  if (MAILY.test(from) && LISTY.test(to)) return "pop";
+  if (LISTY.test(from) && LISTY.test(to)) return "switch";
+  if (MAILY.test(from) && MAILY.test(to)) return from === "opening" ? "none" : "next";
+  return "fade";
+}
+/* the screen going stays under the one coming, and fades as that one arrives: never a frame of empty background
+   between the two. (Out of reach meanwhile: it takes no clicks, and nothing that looks for the screen finds it.) */
+function screenAway(old, el, how) {
+  for (const x of $$(":scope > .qm-leaving", host)) x.remove();
+  const keep = old && old !== el && /^(push|pop|next|switch)$/.test(how) && !prefersStill() && !document.hidden;
+  if (!keep) { host.replaceChildren(el); return; }
+  for (const c of [...host.children]) if (c !== old) c.remove();
+  old.classList.remove("qm-arriving");
+  old.classList.add("qm-leaving");
+  old.inert = true;
+  old.setAttribute("aria-hidden", "true");
+  el.classList.add("qm-arriving");
+  host.insertBefore(el, old); // (first in the page's order too)
+  const dx = how === "push" ? -14 : how === "pop" ? 14 : 0;
+  const a = play(old, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: dx ? `translateX(${dx}px)` : "none" }], { ms: how === "switch" ? 110 : 130, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" });
+  let over = false;
+  const end = () => { if (over) return; over = true; old.remove(); el.classList.remove("qm-arriving"); };
+  afterAnim(a, end);
+  setTimeout(end, 600 * slowMo());
+}
 function screenIn(el, from, to) {
-  let how = "fade";
-  if (LISTY.test(from) && MAILY.test(to)) how = "push";
-  else if (MAILY.test(from) && LISTY.test(to)) how = "pop";
-  else if (LISTY.test(from) && LISTY.test(to)) how = "switch";
-  else if (MAILY.test(from) && MAILY.test(to)) how = from === "opening" ? "none" : "next";
-  if (!from) how = "fade";
+  const how = screenHowOf(from, to);
   screenHow = { how, at: Date.now() };
   // (the real conversation replacing what was drawn while Gmail loaded it: what's new fades in, the title stays)
-  if (how === "none") { if (from === "opening") requestAnimationFrame(() => fadeAllBut(el, $("h1", el), 160)); return; }
+  if (how === "none") { ROOT.classList.remove("qm-sliding"); if (from === "opening") requestAnimationFrame(() => fadeAllBut(el, $("h1", el), 160)); return; }
   const frames = {
     push: [{ opacity: 0, transform: "translateX(28px)" }, { opacity: 1, offset: 0.4 }, { opacity: 1, transform: "none" }],
     pop: [{ opacity: 0, transform: "translateX(-20px)" }, { opacity: 1, offset: 0.4 }, { opacity: 1, transform: "none" }],
@@ -115,8 +138,11 @@ function screenIn(el, from, to) {
     fade: [{ opacity: 0 }, { opacity: 1 }],
   }[how];
   const a = /^(switch|fade)$/.test(how) ? play(el, frames, { ms: 160, easing: "ease-out" }) : play(el, frames, { spring: "smooth" });
-  // Gmail's editor sits over the reply box from outside it: placed again once the screen is where it stays
-  afterAnim(a, () => { const c = composerOf(); if (c && c.ip) placeBar(c); });
+  // Gmail's editor sits over the reply box from outside it: out of sight while the screen moves, then placed again
+  // once the screen is where it stays
+  const token = (screenIn.n = (screenIn.n || 0) + 1);
+  ROOT.classList.toggle("qm-sliding", !!a && !/^(switch|fade)$/.test(how));
+  afterAnim(a, () => { if (screenIn.n === token) ROOT.classList.remove("qm-sliding"); const c = composerOf(); if (c && c.ip) placeBar(c); });
 }
 /* everything in a screen fades in except `keep` (and what holds it), which is already where it belongs */
 function fadeAllBut(root, keep, ms) {
@@ -158,6 +184,13 @@ function popStar(btn) {
   const svg = $("svg", btn) || btn;
   play(svg, on ? [{ scale: "1" }, { scale: "1.38", offset: 0.3 }, { scale: "1" }] : [{ scale: "1" }, { scale: "0.8", offset: 0.35 }, { scale: "1" }], { spring: "bouncy", ms: 520 });
   if (on && flourish()) sparks(btn, 6, "var(--qm-star, #f5c542)");
+}
+/* the star by a conversation's title, arriving: it spins up out of nothing, a little past its size, and settles */
+function popStarIn(btn) {
+  if (!btn || !btn.isConnected || prefersStill()) return;
+  const svg = $("svg", btn) || btn;
+  play(svg, [{ scale: "0", rotate: "-40deg", opacity: 0 }, { scale: "1.28", rotate: "6deg", opacity: 1, offset: 0.5 }, { scale: "1", rotate: "0deg", opacity: 1 }], { spring: "bouncy", ms: 600 });
+  if (flourish()) setTimeout(() => sparks(btn, 7, "var(--qm-star, #f5c542)"), 90 * slowMo());
 }
 function sparks(at, n, color) {
   const r = at.getBoundingClientRect();
@@ -245,7 +278,7 @@ function flyEmoji(emoji, from, mid) {
   const e = h("span", { class: "qm-flyemoji", text: emoji });
   e.style.cssText = `left:${from.left + from.width / 2}px;top:${from.top + from.height / 2}px`;
   document.body.appendChild(e);
-  const find = () => $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(mid))}"] .qm-react.qm-pending, #qm-view .qm-article .qm-react.qm-pending, #qm-mfull .qm-react.qm-pending`);
+  const find = () => $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(mid))}"] .qm-react.qm-pending:not(.qm-leaving *), #qm-view .qm-article .qm-react.qm-pending:not(.qm-leaving *), #qm-mfull .qm-react.qm-pending`);
   until(find, 500, 30).then((chip) => {
     const t = chip && chip.getBoundingClientRect();
     if (!t || !t.width) {
@@ -312,7 +345,7 @@ function slideTo(from, to) {
   const plate = h("i", { class: "qm-plate", "aria-hidden": "true" });
   const x = b.left - p.left + box.scrollLeft - box.clientLeft, y = b.top - p.top + box.scrollTop - box.clientTop;
   plate.style.cssText = `left:${x}px;top:${y}px;width:${b.width}px;height:${b.height}px;border-radius:${look.radius};background:${look.bg};box-shadow:${look.sh}`;
-  box.prepend(plate);
+  box.appendChild(plate);
   box.qmPlate = plate;
   to.classList.add("qm-slid");
   const anim = play(plate, [{ transform: `translate(${a.left - b.left}px, ${a.top - b.top}px) scale(${a.width / b.width}, ${a.height / b.height})` }, { transform: "none" }], { spring: "snappy" });

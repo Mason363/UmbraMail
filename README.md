@@ -14,6 +14,8 @@ Umbra collects zero data. There's no Umbra server and no analytics. AI is off un
 - **Chrome extension:** [in the Chrome Web Store](https://chromewebstore.google.com/detail/umbra-mail/knncmggokkablenghpnhicpamlnhfpip). It needs Chrome 116 or later.
 - **From source:** `npm run build`, then install `dist/umbra.user.js`, or load `dist/extension/` unpacked.
 
+To see plain Gmail in a tab, use ⌘K › Plain Gmail in this tab, Settings, or your userscript manager's menu. Nothing of Umbra's stays on the page, and the next Gmail page has Umbra again. In Chrome, turning the extension off steps Umbra aside in open tabs too.
+
 The first time Gmail opens with Umbra, a short welcome plays: an eclipse, what Umbra is, how new mail should arrive, and whether to use AI (with the provider's terms to agree to). ⌘K › Welcome to Umbra shows it again.
 
 ## What it does
@@ -29,6 +31,7 @@ The first time Gmail opens with Umbra, a short welcome plays: an eclipse, what U
 - **Tracker notes.** An email with tracking pixels says "Tracks opens", and Umbra's copy of it leaves the pixels out.
 - **Codes.** Sign-in and verification codes show on their email's row, ready to copy.
 - **Dual view.** The list stays on the left while you read on the right.
+- **Invitations.** Answer a calendar invitation (Yes, Maybe, No) where you read it. An .ics file opens as the event: what, when, where, and who sent it.
 
 ### Calm
 
@@ -47,6 +50,7 @@ The first time Gmail opens with Umbra, a short welcome plays: an eclipse, what U
 - **Promises.** "I'll send the slides by Friday" in mail you sent becomes a quiet line at the top of the inbox until you mark it done. This is found on your computer, without AI.
 - **Drop files anywhere.** Over a conversation they attach to your reply. Anywhere else they start a new message.
 - **Change accounts mid-message.** Pick another From account and the message moves to that account's Gmail with your words in it.
+- **Email links.** An address you click, in an email or on a website, opens a new message in your inbox with who it's to, the subject and the words already filled in, instead of Gmail's full-page one. Settings › Writing can leave it to Gmail.
 
 ### Finding and doing
 

@@ -56,7 +56,7 @@ function parseDue(s, base) {
     if (wd[1]) n += n < 7 ? 7 : 0;
     return withTime(addDays(n));
   }
-  const md = new RegExp("\\b(" + MONTH_WORDS.join("|") + ")[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b").exec(s) || /\b(\d{1,2})\/(\d{1,2})\b/.exec(s);
+  const md = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/.exec(s) || /\b(?:by|on|due|until|before)\s+(\d{1,2})\/(\d{1,2})\b/.exec(s);
   if (md) {
     const month = isNaN(Number(md[1])) ? MONTH_WORDS.indexOf(md[1].slice(0, 3)) : Number(md[1]) - 1;
     const day = Number(md[2]);
@@ -72,7 +72,7 @@ function parseDue(s, base) {
 
 /* ---- promises: what you said you'd do, in mail you wrote. Each is the sentence, to whom it was said, and
    when it's due if a time was named. Questions, hopes and conditions aren't promises. */
-const PROMISE = /\b(i['’]ll|i will|i shall|i['’]m going to|i am going to|i can (?:get|send|have|do|share|look)|let me (?:get back|check|look|send|follow)|will (?:get back|send|share|follow up|circle back|look into)|i promise)\b/i;
+const PROMISE = /\b(i['’]ll|i will|i shall|i['’]m going to|i am going to|i can (?:get|send|have|do|share|look)|let me (?:get back|check|look|send|follow)|(?:^|\bwe\s+|\bwe['’]ll\s+)will (?:get back|send|share|follow up|circle back|look into)|^will (?:get back|send|share|follow up|circle back|look into)|we['’]ll (?:get back|send|share|follow up|circle back|look into)|i promise)\b/i;
 const NOT_PROMISE = /\?\s*$|\b(maybe|might|perhaps|probably|possibly|hopefully|if (?:i|you|we)|i hope|i wish|i['’]ll (?:be|see|try|have to|need)|i will (?:be|see|try|have to|need)|i['’]ll let you know if|whether)\b/i;
 function findPromises(textIn, sentAt) {
   const out = [];
@@ -89,7 +89,8 @@ function findPromises(textIn, sentAt) {
 }
 
 /* ---- tone: words that read heated, said back as one plain reason ("all caps", "!!!") */
-const HEAT = /\b(ridiculous|unacceptable|outrageous|furious|livid|idiot\w*|stupid|incompetent|pathetic|disgusting|absurd|wtf|how dare|never again|sick of|fed up|shut up|worst|useless|liar|lying|insult\w*)\b/i;
+const HEAT = /\b(ridiculous|unacceptable|outrageous|furious|livid|idiot\w*|stupid|incompetent|pathetic|disgusting|absurd|wtf|how dare|never again|sick of|fed up|shut up|liar|insult\w*)\b/i;
+const MILD_HEAT = /\b(worst|useless|lying)\b/i;
 function toneOf(s) {
   s = String(s || "");
   const words = s.match(/\b[A-Z]{3,}\b/g) || [];
@@ -97,46 +98,54 @@ function toneOf(s) {
   const why = [];
   if (shouting.length >= 3 && shouting.length / Math.max(1, (s.match(/\b\w+\b/g) || []).length) > 0.08) why.push("a lot of capitals");
   if (/[!?]{3,}|!{2,}/.test(s)) why.push("strong punctuation");
-  const m = HEAT.exec(s);
+  const m = HEAT.exec(s), mild = MILD_HEAT.exec(s);
   if (m) why.push("“" + m[0] + "”");
+  if (mild && (m || why.length)) why.push("“" + mild[0] + "”");
   return { heated: !!m || why.length >= 2, why };
 }
-const ATTACH_WORDS = /\b(attached|attaching|attachment|enclosed|i['’]ve attached|see the attach|find attached|pfa)\b/i;
+const ATTACH_WORDS = /\b(attached|attaching|enclosed|i['’]ve attached|see the attach\w*|find attached|pfa|(?:the|an|my) attachment (?:is|has|with|below|here))\b/i;
 const mentionsAttachment = (s) => ATTACH_WORDS.test(String(s || "").split(/\n\s*On .+wrote:\s*\n/)[0]);
 
 /* ---- links: where one really goes. Gmail and other mail systems wrap links (to check them, or to count
    clicks); the real destination is unwrapped where it's written in the link, and the counter named where not. */
+// (each by the address it sends a click through, its site and path: a plain link to salesforce.com, a HubSpot blog or a
+// picture host isn't a counter)
 const CLICK_COUNTERS = [
-  [/list-manage\.com|mailchi\.mp|mcusercontent|mc\.us\d+/i, "Mailchimp"], [/sendgrid\.net|ct\.sendgrid/i, "SendGrid"], [/hubspot|hs-sites|hubspotlinks|hsforms/i, "HubSpot"],
-  [/mandrillapp|mailgun|mg\.\w+\.\w+|email\.mg\./i, "Mailgun"], [/klaviyo|trk\.klclick/i, "Klaviyo"], [/substack\.com\/redirect|email\.substack/i, "Substack"],
-  [/beehiiv|link\.mail\.beehiiv/i, "beehiiv"], [/convertkit|ck\.page|click\.convertkit/i, "Kit"], [/sparkpost|spgo\.io/i, "SparkPost"], [/amazonses|awstrack\.me/i, "Amazon SES"],
-  [/constantcontact|r20\.rs6\.net/i, "Constant Contact"], [/marketo|mkto/i, "Marketo"], [/salesforce|exacttarget|clicks\.\w+\.com/i, "Salesforce"], [/linkedin\.com\/comm/i, "LinkedIn"],
-  [/\bclick\.|\bclicks\.|\btrack\.|\btracking\.|\bemail\.\w+\.\w+\/c\//i, "a click counter"],
+  [/^([\w-]+\.)*(list-manage\.com|mailchi\.mp|mcusercontent\.com)\//i, "Mailchimp"], [/^([\w-]+\.)*sendgrid\.net\//i, "SendGrid"],
+  [/^([\w-]+\.)*(hubspotlinks\.com|hubspotemail\.net|hsforms\.com|hs-sites\.com)\/|^(t|track|links)\.hubspot\.com\//i, "HubSpot"],
+  [/^([\w-]+\.)*(mandrillapp\.com|mailgun\.org|mailgun\.net)\/|^(email\.)?mg\.[\w-]+(\.[\w-]+)+\//i, "Mailgun"], [/^([\w-]+\.)*(klaviyo\.com|klclick\d*\.com)\/|^trk\.klclick/i, "Klaviyo"],
+  [/^substack\.com\/redirect\/|^email\.substack\.com\//i, "Substack"], [/^([\w-]+\.)*(beehiiv\.com)\//i, "beehiiv"], [/^([\w-]+\.)*(convertkit\.com|ck\.page|convertkit-mail\d*\.com)\//i, "Kit"],
+  [/^([\w-]+\.)*(sparkpostmail\.com|spgo\.io)\//i, "SparkPost"], [/^([\w-]+\.)*(awstrack\.me|amazonses\.com)\//i, "Amazon SES"], [/^([\w-]+\.)*(rs6\.net|constantcontact\.com)\//i, "Constant Contact"],
+  [/^([\w-]+\.)*(mktoweb\.com|marketo\.com|mktossl\.com)\//i, "Marketo"], [/^([\w-]+\.)*(exacttarget\.com|exct\.net)\//i, "Salesforce"], [/^linkedin\.com\/comm\//i, "LinkedIn"],
+  [/^(click|clicks|track|tracking|trk)\.[\w-]+(\.[\w-]+)+\/|^email\.[\w-]+(\.[\w-]+)+\/c\//i, "a click counter"],
 ];
 function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, "").toLowerCase(); } catch (e) { return ""; } }
 function realLink(href) {
-  let u = String(href || "").trim(), via = "";
+  let u = String(href || "").trim(), via = "", opaque = false;
   for (let i = 0; i < 4; i++) {
     let url;
     try { url = new URL(u); } catch (e) { break; }
-    const host = url.hostname.toLowerCase();
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
     const p = url.searchParams;
     if (/(^|\.)google\.[a-z.]+$/.test(host) && url.pathname === "/url" && (p.get("q") || p.get("url"))) { u = p.get("q") || p.get("url"); continue; }
     if (/safelinks\.protection\.outlook\.com$/.test(host) && p.get("url")) { u = p.get("url"); continue; }
     if (/urldefense\.(com|proofpoint\.com)$/.test(host)) { const m = /__(https?:\/\/[^_]+)__/.exec(u); if (m) { u = m[1]; continue; } }
     if (/(^|\.)l\.facebook\.com$|(^|\.)l\.instagram\.com$/.test(host) && p.get("u")) { u = p.get("u"); continue; }
     if (/(^|\.)t\.co$/.test(host)) { via = via || "X"; break; }
-    // a click counter that writes the destination into its own address
+    // a click counter: the destination it writes into its own address, or (written nowhere) the counter itself. Any other
+    // site's ?url= is that site's business: the link goes to that site, and that's what's said
+    const counter = CLICK_COUNTERS.find(([re]) => re.test(host + url.pathname));
+    if (!counter) break;
+    via = via || counter[1];
+    let next = "";
     for (const key of ["url", "u", "target", "redirect", "redirect_url", "dest", "destination", "r", "link"]) {
       const v = p.get(key);
-      if (v && /^https?:\/\//i.test(v) && hostOf(v) !== host) { const c = CLICK_COUNTERS.find(([re]) => re.test(host)); if (c) via = c[1]; u = v; break; }
+      if (v && /^https?:\/\//i.test(v) && hostOf(v) !== host) { next = v; break; }
     }
-    if (u !== url.toString() && u !== href) continue;
-    break;
+    if (!next) { opaque = true; break; }
+    u = next;
   }
   const host = hostOf(u);
-  if (!via) { const c = CLICK_COUNTERS.find(([re]) => re.test(host) || re.test(u)); if (c) via = c[1]; }
-  const opaque = !!via && CLICK_COUNTERS.some(([re]) => re.test(host));
   // (for mail and phone links, who: "ann@x.com", "+1 555 0100")
   const who = (pre) => { let v = u.replace(pre, "").split("?")[0]; try { v = decodeURIComponent(v); } catch (e) { /* as written */ } return v.trim(); };
   return { url: u, host, via, opaque, mail: /^mailto:/i.test(u) ? who(/^mailto:/i) || "someone" : "", tel: /^tel:/i.test(u) ? who(/^tel:/i) || "a number" : "" };
@@ -173,21 +182,23 @@ const PIXEL_SERVICES = [
   [/salesforce|exacttarget|pardot/i, "Salesforce"], [/marketo|mkto/i, "Marketo"], [/constantcontact|rs6\.net/i, "Constant Contact"], [/linkedin\.com\/emimp/i, "LinkedIn"],
   [/\/(open|opens|pixel|beacon|track|tracking|trk)(\.gif|\.png)?([/?#]|$)|[?&](open|pixel)=/i, "a tracker"],
 ];
+// (a service's open-tracking address: /open, /track/open.php, /wf/open, /e2t/to/…, ?open=…)
+const OPEN_PATH = /\/(open|opens|pixel|beacon|track|tracking|trk|e2t)(\.gif|\.png|\.php)?([/?#]|$)|\/wf\/open|[?&](open|pixel)=/i;
 /* the original address behind Gmail's image proxy (googleusercontent.com/proxy/…#https://…) */
 function unproxy(src) { const i = String(src || "").indexOf("#http"); return i > 0 ? src.slice(i + 1) : String(src || ""); }
 /* which service a picture tells, or "" when it's a real picture. w, h: its size as written (0 when not) */
 function trackerOf(src, w, h) {
   const real = unproxy(src);
-  const tiny = (w > 0 && w <= 3) || (h > 0 && h <= 3);
+  const tiny = (w > 0 && w <= 3 && !(h > 3)) || (h > 0 && h <= 3 && !(w > 3));
   const unsized = !(w > 0) && !(h > 0);
   const big = w > 40 || h > 40;
   const hit = PIXEL_SERVICES.find(([re]) => re.test(real));
-  // a named service's picture counts unless it's plainly a real picture; the general pattern only for a picture
-  // too small to see, or one with no size whose address isn't an ordinary image file
-  if (hit && hit[1] !== "a tracker" && !big) return hit[1];
   let path = real;
   try { path = new URL(real, "https://x.x").pathname; } catch (e) { /* an address that doesn't parse: as written */ }
-  if (hit && (tiny || (unsized && !/\.(png|jpe?g|gif|webp|svg|bmp)(\?|$)/i.test(path)))) return hit[1];
+  // a picture counts as a tracker when it's too small to see, or has no size and isn't an ordinary image file; a named
+  // service's also when its address is the service's open-tracking one (its own logos, photos and banners are pictures)
+  const image = /\.(png|jpe?g|gif|webp|svg|bmp)(\?|$)/i.test(path);
+  if (hit && !big && (tiny || (unsized && !image) || (hit[1] !== "a tracker" && OPEN_PATH.test(path)))) return hit[1];
   if (tiny && /^https?:/i.test(real) && !/\.svg(\?|$)/i.test(real)) return "a tracker";
   return "";
 }
@@ -241,7 +252,8 @@ const FIND_OPS = /(^|\s)(-?)(from|to|cc|bcc|subject|label|in|is|has|filename|aft
 function findTerms(q) {
   const terms = [];
   let rest = String(q || "").replace(FIND_OPS, (all, pre, neg, op, val) => {
-    if (!neg && /^(from|to|cc|subject|filename)$/i.test(op)) terms.push(...val.replace(/^["({]|[")}]$/g, "").split(/\s+/));
+    // ("from:me", "cc:me": you, not the word "me")
+    if (!neg && /^(from|to|cc|bcc|subject|filename)$/i.test(op)) terms.push(...val.replace(/^["({]|[")}]$/g, "").split(/\s+/).filter((w) => !/^(from|to|cc|bcc)$/i.test(op) || !/^me$/i.test(w)));
     return " ";
   });
   rest = rest.replace(/(^|\s)-("[^"]*"|\S+)/g, " ").replace(/"([^"]+)"/g, (all, p) => { terms.push(p); return " "; });
@@ -279,4 +291,46 @@ function ownWords(text) {
   return String(text || "").split("\n").filter((l) => !/^\s*>/.test(l)).join("\n")
     .replace(/(^|\n)[^\n]{0,12}\bOn\s[^\n]{4,160}?\bwrote:[\s\S]*$/i, "$1")
     .replace(/(^|\n)-{4,}\s*Forwarded message\s*-{4,}[\s\S]*$/i, "$1").trim();
+}
+
+/* a link that asks for a new message (mailto:, or Gmail's full-page new message): who it's to, the subject and the
+   words, and which account the link names. null when it isn't one, or names nothing to fill in.
+   (No constants from outside: the bundle calls it before anything else is set up.) */
+function composeLink(href) {
+  const s = String(href || "").trim();
+  const dec = (x) => { try { return decodeURIComponent(x); } catch (e) { return x; } };
+  const list = (x) => String(x || "").split(/[,;]/).map((y) => y.trim().replace(/^mailto:/i, "").trim()).filter(Boolean);
+  const d = { to: [], cc: [], bcc: [], subject: "", text: "", u: null, email: "" };
+  // mailto:a@b.com,c@d.com?cc=…&bcc=…&subject=…&body=… (a + is a plus here, not a space)
+  const mailto = (m) => {
+    const q = m.indexOf("?");
+    d.to.push(...list(dec(q < 0 ? m : m.slice(0, q))));
+    for (const part of (q < 0 ? "" : m.slice(q + 1)).split("&")) {
+      if (!part) continue;
+      const i = part.indexOf("="), k = dec(i < 0 ? part : part.slice(0, i)).toLowerCase(), v = i < 0 ? "" : dec(part.slice(i + 1));
+      if (k === "to" || k === "cc" || k === "bcc") d[k].push(...list(v));
+      else if (k === "subject" && !d.subject) d.subject = v;
+      else if (k === "body" && !d.text) d.text = v;
+    }
+  };
+  if (/^mailto:/i.test(s)) mailto(s.slice(7));
+  else {
+    let u;
+    try { u = new URL(s); } catch (e) { return null; }
+    if (u.hostname !== "mail.google.com" || !/^\/mail(\/|$)/.test(u.pathname)) return null;
+    const q = u.searchParams;
+    if (!(q.get("view") === "cm" || q.get("tf") === "cm" || q.get("extsrc") === "mailto")) return null;
+    if (q.has("draft") || q.has("th") || q.has("compose")) return null; // (a draft or a reply of Gmail's own: as it is)
+    for (const k of ["to", "cc", "bcc"]) d[k].push(...list(q.get(k)));
+    d.subject = q.get("su") || q.get("subject") || "";
+    d.text = q.get("body") || "";
+    const m = /^mailto:(.*)$/i.exec(q.get("url") || "");
+    if (m) mailto(m[1]);
+    const n = (u.pathname.match(/^\/mail\/u\/(\d+)/) || [])[1], who = q.get("authuser") || "";
+    d.u = n != null ? Number(n) : /^\d+$/.test(who) ? Number(who) : null;
+    d.email = /@/.test(who) ? who.toLowerCase() : "";
+  }
+  for (const k of ["to", "cc", "bcc"]) d[k] = [...new Set(d[k])];
+  d.text = d.text.replace(/\r\n?/g, "\n");
+  return d.to.length || d.cc.length || d.bcc.length || d.subject || d.text ? d : null;
 }

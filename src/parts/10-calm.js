@@ -26,12 +26,15 @@ const clockAt = (min) => timeOfDay(atClock(Date.now(), min));
 const whenNext = (t) => { const w = dayWord(t, Date.now()); return timeOfDay(t) + (w === "today" ? "" : w === "tomorrow" ? " tomorrow" : " on " + w); };
 
 /* ---- senders: each rule is about one address ---- */
-// the person (or company) a row is from: the first one on it who isn't you
+// the person (or company) a row is from: the newest one on it who isn't you (Gmail names them in the order they wrote;
+// "me" is you, from whichever of your addresses)
+const isMe = (r, p) => p.email === ((((r && r.account) || {}).email) || accountEmail()) || /^me$/i.test(String(p.short || p.name || "").trim());
 function senderOf(r) {
-  const me = ((r && r.account) || {}).email || accountEmail();
-  const p = rowPeople(r || {}).find((x) => x.email && x.email !== me);
+  const p = rowPeople(r || {}).filter((x) => x.email && !isMe(r, x)).pop();
   return p ? { email: p.email.toLowerCase(), name: personName(p.email, p.name) || p.name || p.email } : null;
 }
+// anyone on it you always let through
+const vipOn = (r) => rowPeople(r || {}).some((p) => p.email && !isMe(r, p) && (ruleFor(p.email) || {}).kind === "vip");
 function ruleFor(email) {
   const r = email && (prefs.rules || {})[String(email).toLowerCase()];
   if (!r) return null;
@@ -39,6 +42,11 @@ function ruleFor(email) {
   return r;
 }
 const RULE_WORDS = { vip: "always let through", paper: "sent to the paper", quiet: "quiet for a month" };
+setTimeout(() => {
+  const rules = prefs.rules || {}, left = {};
+  for (const [e, r] of Object.entries(rules)) if (!(r && r.kind === "quiet" && r.until && r.until < Date.now())) left[e] = r;
+  if (Object.keys(left).length !== Object.keys(rules).length) { prefs.rules = left; store.set("prefs3", prefs); }
+}, 5000);
 function setRule(email, kind, name) {
   email = String(email || "").toLowerCase();
   if (!email) return;
@@ -52,7 +60,7 @@ function setRule(email, kind, name) {
   const u = pushUndo({ label: kind ? who + " " + RULE_WORDS[kind] : who + " back to normal", after: was ? who + ": " + RULE_WORDS[was.kind] + " again." : who + ": back to normal.", undo: () => { const r2 = Object.assign({}, prefs.rules); if (was) r2[email] = was; else delete r2[email]; prefs.rules = r2; savePrefs(); } });
   toast(kind ? who + ": " + RULE_WORDS[kind] + "." : who + ": back to normal.", undoAct(u));
 }
-const rowHasMe = (r) => rowPeople(r).some((p) => p.email === (((r.account || {}).email) || accountEmail()));
+const rowHasMe = (r) => rowPeople(r).some((p) => isMe(r, p));
 
 /* ---- what happens to a row in the inbox: "show", "held" (until the next tide), "paper", or "quiet" ---- */
 let tideOpenAt = Number(store.get("tide-open", 0)) || 0; // "Let them in": everything before this shows now
@@ -70,14 +78,34 @@ function paperKind(r) {
 // mail for the paper: automated, not from (or with) a person, not starred, not waiting on you, of a kind you chose
 function paperish(r, c) {
   if (isFromPerson(r) || r.starred || r.draft || rowHasMe(r) || needsYou(r)) return false;
+  if (!automatedRow(r)) return false;
   return (c || cp()).paperKinds.includes(paperKind(r));
+}
+// (a person's name: two or three words, each capitalised, none of them a brand's word; or one name that is also the
+// start of their address, at a domain that isn't that name)
+function personlike(name, email) {
+  const n = String(name || "").trim();
+  if (!n || BRANDY.test(n) || /^the\s/i.test(n)) return false;
+  if (/^[\p{Lu}][\p{Ll}'’-]+(\s+[\p{Lu}][\p{Ll}'’.-]*){1,2}$/u.test(n)) return true;
+  const [local = "", domain = ""] = String(email || "").toLowerCase().split("@");
+  const w = n.toLowerCase();
+  return /^[\p{L}'’-]{2,}$/u.test(n) && local.startsWith(w) && !domain.includes(w);
+}
+function automatedRow(r) {
+  const g = gemFor(r);
+  if (g && g.category) return g.category !== "People";
+  const who = senderOf(r);
+  if (!who) return true;
+  if (isAutomated(who.email)) return true;
+  const p = rowPeople(r).find((x) => x.email === who.email) || {};
+  return !personlike(p.name || p.short || who.name, who.email);
 }
 function calmFate(r, c) {
   c = c || cp();
   const who = senderOf(r);
   const rule = who && ruleFor(who.email);
   if (rule && rule.kind === "quiet") return "quiet";
-  if (rule && rule.kind === "vip" && c.vip) return "show";
+  if (c.vip && ((rule && rule.kind === "vip") || vipOn(r))) return "show";
   if (c.tides !== "off" && r.unread && r.time > tideCut(c) && !(c.waiting && needsYou(r)) && !(c.mine && rowHasMe(r))) return "held";
   if (c.paper && ((rule && rule.kind === "paper") || paperish(r, c))) return "paper";
   return "show";
@@ -120,7 +148,7 @@ function calmTick() {
   const c = cp(), now = Date.now();
   const next = [nextTideAt(now, tideMins(c)), c.paper ? nextClock(now, c.edition) : 0].filter(Boolean);
   if (!next.length) return;
-  calmTimer = setTimeout(() => { everyKeys = ["!redraw"]; paperTurnover(); invalidate(true); calmTick(); }, Math.min(...next) - now + 1500);
+  calmTimer = setTimeout(() => { if (enabled) { everyKeys = ["!redraw"]; paperTurnover(); invalidate(true); } calmTick(); }, Math.min(...next) - now + 1500);
 }
 function letTideIn() {
   tideOpenAt = Date.now();
@@ -328,6 +356,7 @@ const archiveMany = (ids) => actMany(ids, "done");
 // (looked at each time the inbox is drawn, at most once a minute; it acts only when it can act right: this account's
 // inbox on screen and read in full, and you not in the middle of something)
 function paperTurnover() {
+  if (!enabled) return;
   const c = cp();
   if (!c.paper || !c.putAway) return;
   const now = Date.now();
@@ -360,40 +389,51 @@ async function runUndo(u) {
 // the Undo button on a note (for one thing in particular)
 const undoAct = (u) => ({ label: "Undo", run: () => runUndo(u) });
 async function undoLast() {
-  // Gmail's own toast first: it's the exact reverse of what just happened
+  while (undos.length && Date.now() - undos[undos.length - 1].at > 10 * 60 * 1000) undos.pop();
+  const u = undos[undos.length - 1];
+  // Gmail's own toast first: it's the exact reverse of what just happened (unless what just happened was several, and
+  // Gmail's note is only for the last of them)
   const g = document.getElementById("qm-gtoast");
   const gb = g && !g.classList.contains("qm-out") && $$("button", g).find((b) => /^undo$/i.test(text(b)));
-  if (gb) { gb.click(); return; }
-  const u = undos[undos.length - 1];
+  if (gb && !(u && u.ids && u.ids.length > 1 && Date.now() - u.at < 30000)) { gb.click(); return; }
   if (!u) { toast("Nothing to undo."); return; }
   await runUndo(u);
 }
 /* out of Trash: each conversation opened there out of sight and moved back to the inbox */
 async function unTrash(ids) {
   let n = 0;
-  for (const id of ids) { gone.delete(id); await ghostThread({ id, folder: "#trash" }, async () => { const b = gmailToolbar(null, ["Move to Inbox", "Not spam"]); if (b) { press(b); n++; } await wait(300); }); await until(() => !ghost, 4000, 50); }
+  for (const id of ids) { gone.delete(id); await ghostThread({ id, folder: "#trash" }, async () => { const b = gmailToolbar(null, ["Move to Inbox", "Not spam"]); if (b) { press(b); n++; backInList(id); } await wait(300); }); await until(() => !ghost, 4000, 50); }
   return n;
 }
 /* back to the inbox: each conversation opened out of sight and moved back */
 async function unDone(ids) {
   let n = 0;
-  for (const id of ids) { gone.delete(id); await ghostThread({ id }, async () => { const b = gmailToolbar(null, ["Move to Inbox"]); if (b) { press(b); n++; } await wait(300); }); await until(() => !ghost, 4000, 50); }
+  for (const id of ids) { gone.delete(id); await ghostThread({ id }, async () => { const b = gmailToolbar(null, ["Move to Inbox"]); if (b) { press(b); n++; backInList(id); } await wait(300); }); await until(() => !ghost, 4000, 50); }
   return n;
 }
+/* the row of a conversation put back (in the inbox it's back in): the very row, where it was, at once */
+function backInList(id) {
+  const r = goneRows.get(String(id));
+  goneRows.delete(String(id));
+  gone.delete(String(id));
+  const src = mainSource();
+  if (r && src && isInboxFolder(everyFolder || "#inbox") && !src.rows.has(r.id)) src.rows.set(r.id, r);
+  everyKeys = ["!redraw"];
+}
 // Gmail's own Undo (on its note, or by ⌘Z while it's up) undoes what was just done: Umbra's entry for that goes too,
-// so the next ⌘Z doesn't do it again
+// so the next ⌘Z doesn't do it again (only when the entry was for that one thing)
 document.addEventListener("click", (e) => {
   const b = e.target && e.target.closest && e.target.closest("#qm-gtoast button");
   if (!b || !/^undo$/i.test(text(b))) return;
   const u = undos[undos.length - 1];
-  if (u && Date.now() - u.at < 20000) undos.pop();
+  if (u && Date.now() - u.at < 20000 && !(u.ids && u.ids.length > 1)) { undos.pop(); for (const id of u.ids || []) backInList(id); }
 }, true);
 
 /* =================================================================== the tab's title
    Gmail's says "Inbox (3,145)": with a calm title it says where you are, and not how much is waiting. */
 let titleObs = null;
 function calmTitle() {
-  const want = cp().title;
+  const want = enabled && cp().title; // (plain Gmail: Gmail's own title, counts and all)
   const t = document.querySelector("title");
   if (!t) return;
   if (!titleObs) {
@@ -416,18 +456,26 @@ function calmTitle() {
 let readingFrom = "";
 // the Monday a week starts on, as "2026-10-05" (local time)
 const weekKey = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
-setInterval(() => {
-  if (!readingFrom || document.hidden || !/^(thread|reading)$/.test(screen.kind) || Date.now() - lastInput > 60000) return;
+let timeOwed = new Map(); // email -> seconds not yet written (kept, and written about once a minute)
+const writeTime = () => {
+  if (!timeOwed.size) return;
   const k = "time:" + accountEmail();
   const all = store.get(k, {}) || {};
   const wk = weekKey(Date.now());
-  const me = all[readingFrom] || (all[readingFrom] = {});
-  me[wk] = (me[wk] || 0) + 5;
+  for (const [email, secs] of timeOwed) { const me = all[email] || (all[email] = {}); me[wk] = (me[wk] || 0) + secs; }
+  timeOwed = new Map();
   // two months is plenty
   const cut = weekKey(Date.now() - 63 * 86400000);
   for (const e of Object.keys(all)) { for (const w of Object.keys(all[e])) if (w < cut) delete all[e][w]; if (!Object.keys(all[e]).length) delete all[e]; }
   store.set(k, all);
+};
+setInterval(() => {
+  if (!readingFrom || document.hidden || !/^(thread|reading)$/.test(screen.kind) || Date.now() - lastInput > 60000) return;
+  timeOwed.set(readingFrom, (timeOwed.get(readingFrom) || 0) + 5);
 }, 5000);
+setInterval(writeTime, 60000);
+window.addEventListener("pagehide", writeTime);
+document.addEventListener("visibilitychange", () => { if (document.hidden) writeTime(); });
 /* minutes a week each sender has had (the last four weeks), with how many emails a week they send */
 function timeBySender() {
   const all = store.get("time:" + accountEmail(), {}) || {};
@@ -439,7 +487,8 @@ function timeBySender() {
   for (const [email, weeks] of Object.entries(all)) {
     const secs = Object.entries(weeks).filter(([w]) => w >= since).reduce((s, [, v]) => s + v, 0);
     if (secs < 30) continue;
-    out.push({ email, mins: secs / 60 / 4, perWeek: (counts.get(email) || 0) / 4, name: personName(email, (seen.get(email) || {}).name) || email });
+    const weeksIn = Math.max(1, Object.keys(weeks).filter((w) => w >= since).length, 4);
+    out.push({ email, mins: secs / 60 / weeksIn, perWeek: (counts.get(email) || 0) / 4, name: personName(email, (seen.get(email) || {}).name) || email });
   }
   return out.sort((a, b) => b.mins - a.mins).slice(0, 20);
 }
@@ -461,7 +510,7 @@ function rowMore(r, anchor) {
     items.push({ label: "Files from " + first, run: () => { files.kind = "all"; files.large = false; files.from = { email: who.email, name: who.name }; goFiles(); } });
     if (!isFromPerson(r)) items.push("-", { label: "Unsubscribe…", run: () => unsubscribeFrom(r, who) });
   }
-  const el = $(`#qm-view .qm-row[data-id="${CSS.escape(r.id)}"]`);
+  const el = $(`#qm-view .qm-row[data-id="${CSS.escape(r.id)}"]:not(.qm-leaving *)`);
   if (everyFolder === "#drafts") items.push(items.length ? "-" : null, { label: "Discard draft", run: () => rowDo(r, "discard", el) });
   else {
     // what Gmail's own menu on a conversation has (the buttons on the row do the rest)
@@ -585,10 +634,12 @@ function subsTabs(el, all) {
     const live = all.filter((x) => !x.done && x.btn && x.email);
     if (notOpened.acct !== accountEmail()) { // what was found last time (it keeps for six hours)
       const kept = store.get("unopened:" + accountEmail(), null);
-      if (kept && Date.now() - kept.at < 6 * 3600 * 1000) notOpened = { at: kept.at, acct: accountEmail(), opened: new Set(kept.opened), busy: false };
+      if (kept && Date.now() - kept.at < 6 * 3600 * 1000 && Array.isArray(kept.looked)) notOpened = { at: kept.at, acct: accountEmail(), opened: new Set(kept.opened), looked: new Set(kept.looked), busy: false };
     }
     if (notOpened.acct !== accountEmail() || Date.now() - notOpened.at > 6 * 3600 * 1000) checkOpened(live);
-    const list = notOpened.opened ? live.filter((x) => !notOpened.opened.has(x.email)) : [];
+    // (one that came after the look, or that the look didn't reach, isn't "not opened": it's looked at next time)
+    if (notOpened.opened && notOpened.looked && live.some((x) => !notOpened.looked.has(x.email)) && Date.now() - notOpened.at > 60000 && !notOpened.busy) checkOpened(live);
+    const list = notOpened.opened ? live.filter((x) => !notOpened.opened.has(x.email) && (!notOpened.looked || notOpened.looked.has(x.email))) : [];
     const sig = "u|" + (notOpened.opened ? list.map((x) => x.email).join() : notOpened.failed ? "failed" : "wait") + "|" + notOpened.busy + "|" + (notOpened.checked || 0);
     if (box.dataset.sig === sig) return true;
     box.dataset.sig = sig;
@@ -643,7 +694,7 @@ function subRow(x) {
 }
 /* who you've opened mail from in the last 60 days: one Gmail search (out of sight) per few dozen senders */
 async function checkOpened(list) {
-  if (notOpened.busy || !list.length) { if (!list.length) notOpened = { at: Date.now(), acct: accountEmail(), opened: new Set(), busy: false }; return; }
+  if (notOpened.busy || !list.length) return; // (Gmail hasn't drawn its senders yet: nothing is settled on an empty page)
   const acct = accountEmail();
   const opened = new Set();
   notOpened = { at: 0, acct, opened: null, busy: true, checked: 0, total: list.length };
@@ -651,18 +702,18 @@ async function checkOpened(list) {
     // a search shows one page: when there's more than a page, the senders are split and asked again, so a sender
     // whose opened mail is further down is never mistaken for one you don't open
     const ask = async (chunk) => {
-      const res = await searchHere("{" + chunk.map((e) => "from:" + e).join(" ") + "} is:read newer_than:60d", 200, true);
+      const res = await searchHere("in:anywhere {" + chunk.map((e) => "from:" + e).join(" ") + "} is:read newer_than:60d", 200, true);
       if (!res || res.error) throw new Error("search"); // no answer isn't "never opened"
       for (const r of res.rows || []) for (const p of r.people || []) { const e = String(p[0] || p.email || "").toLowerCase(); if (chunk.includes(e)) opened.add(e); }
       const left = chunk.filter((e) => !opened.has(e));
-      if (res.more && left.length > 1) { notOpened.checked += chunk.length - left.length; invalidate(); const mid = Math.ceil(left.length / 2); await ask(left.slice(0, mid)); await ask(left.slice(mid)); return; }
+      if (res.more && left.length && chunk.length > 1) { notOpened.checked += chunk.length - left.length; invalidate(); const mid = Math.ceil(left.length / 2); await ask(left.slice(0, mid)); if (left.length > mid) await ask(left.slice(mid)); return; }
       notOpened.checked += chunk.length; // settled: these were either found or truly not opened
       invalidate();
     };
     const emails = list.map((x) => x.email);
     for (let i = 0; i < emails.length; i += 20) await ask(emails.slice(i, i + 20));
-    notOpened = { at: Date.now(), acct, opened, busy: false };
-    store.set("unopened:" + acct, { at: notOpened.at, opened: [...opened] });
+    notOpened = { at: Date.now(), acct, opened, looked: new Set(emails), busy: false };
+    store.set("unopened:" + acct, { at: notOpened.at, opened: [...opened], looked: emails });
   } catch (e) {
     notOpened = { at: Date.now(), acct, opened: null, busy: false, failed: true }; // asked again with Try again, not over and over
   }

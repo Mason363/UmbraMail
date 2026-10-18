@@ -4,7 +4,7 @@
    the first frame: it covers Gmail while Gmail loads underneath, and when you're done the light comes back and
    your inbox is there. Choices are words, not boxes. Nothing here is required: Skip (or Esc on the first page)
    leaves everything as it was. */
-let introOn = false;
+let introOn = false, introStop = null;
 const introHere = () => /^\/mail\//.test(location.pathname) && !/[?&](view|ui|ik)=/.test(location.search);
 const introDue = () => store.get("welcomed", false) === false && introHere();
 // (Umbra from before the welcome had ChatGPT sign-in in the browser: the welcome, once, to set it up)
@@ -218,7 +218,7 @@ function intro(replay) {
   root.addEventListener("keydown", (e) => { onKey(e); e.stopPropagation(); });
   for (const type of ["keyup", "keypress"]) root.addEventListener(type, (e) => e.stopPropagation());
   const guard = (e) => {
-    if (!introOn || root.contains(e.target)) return;
+    if (!introOn || !enabled || root.contains(e.target)) return;
     e.stopImmediatePropagation();
     if (e.type === "keydown") onKey(e);
     if (e.key !== "Tab") e.preventDefault();
@@ -229,13 +229,23 @@ function intro(replay) {
   let lastFocus = null, pulls = 0, pullsAt = 0;
   root.addEventListener("focusin", (e) => { lastFocus = e.target; });
   const trap = (e) => {
-    if (!introOn || root.contains(e.target)) return;
+    if (!introOn || !enabled || root.contains(e.target)) return;
     if (Date.now() - pullsAt > 1000) { pulls = 0; pullsAt = Date.now(); }
     if (++pulls > 20) return; // (never a tug of war)
     const to = lastFocus && root.contains(lastFocus) && lastFocus.getClientRects().length ? lastFocus : root.querySelector(".qm-i-on .qm-i-next:not([disabled]), .qm-i-on button, .qm-i-on input") || root;
     to.focus({ preventScroll: true });
   };
   document.addEventListener("focusin", trap, true);
+  // (plain Gmail asked for while the welcome is up: it goes at once, nothing of it left listening)
+  introStop = () => {
+    introStop = null;
+    window.removeEventListener("resize", resized);
+    for (const type of ["keydown", "keyup", "keypress"]) window.removeEventListener(type, guard, true);
+    document.removeEventListener("focusin", trap, true);
+    root.remove();
+    if (sky) sky.destroy();
+    introOn = false;
+  };
 
   /* ---- motion: what arrives settles in, a little at a time; what leaves just goes */
   let page = -1, shown = false, split = false;
@@ -319,6 +329,7 @@ function intro(replay) {
     }
     waitLine.textContent = "";
     const out = () => {
+      introStop = null;
       window.removeEventListener("resize", resized);
       for (const type of ["keydown", "keyup", "keypress"]) window.removeEventListener(type, guard, true);
       document.removeEventListener("focusin", trap, true);

@@ -27,7 +27,7 @@ function openPerson(email, name, anchor) {
   const shown = personName(email, name) || name || email;
   const rule = ruleFor(email);
   // what Umbra has seen of them (on this computer): conversations, the latest few, and how often
-  const seen = recall.loaded ? [...recall.map.values()].filter((x) => x.email === (accountEmail() || x.email) && x.who.includes(email)).sort((a, b) => b.time - a.time) : [];
+  const seen = recall.loaded ? [...recall.map.values()].filter((x) => x.email === (accountEmail() || x.email) && x.who.split(/\s+/).includes(email)).sort((a, b) => b.time - a.time) : [];
   const month = seen.filter((x) => Date.now() - x.time < 31 * 86400000).length;
   const person = isPersonAddress(email, name);
   const set = (kind) => { setRule(email, rule && rule.kind === kind ? "" : kind, shown); card.remove(); invalidate(true); };
@@ -61,11 +61,7 @@ function openPerson(email, name, anchor) {
 }
 /* a new message to them, from this account */
 function writeTo(email) {
-  compose().then((dlg) => {
-    if (!dlg) return;
-    const to = $$("input", dlg).find((i) => /^to recipients/i.test(i.getAttribute("aria-label") || ""));
-    if (to) { to.focus(); document.execCommand("insertText", false, email + ", "); const subj = $("input[name='subjectbox']", dlg); if (subj) subj.focus(); }
-  });
+  composeTo({ to: [email] });
 }
 
 /* ---- trackers: an email's tracking pixels (taken out of Umbra's copy of it), said plainly ---- */
@@ -95,7 +91,8 @@ function showLink(a) {
   const real = realLink(href);
   if (!real || (!real.host && !real.mail && !real.tel)) return;
   const said = textHost(a.textContent || "");
-  const odd = said && real.host && !sameSite(said, real.host);
+  // (a counter whose destination isn't in the link: nothing to compare the words with)
+  const odd = said && real.host && !real.opaque && !sameSite(said, real.host);
   const where = real.mail ? "Writes to " + real.mail : real.tel ? "Calls " + real.tel : (real.opaque ? "Goes through " + real.via + " (where it ends up isn't in the link)" : real.host);
   const tip = linkTip || (linkTip = h("div", { id: "qm-linktip", role: "status" }));
   tip.replaceChildren(...[icon(odd ? "shield" : "link"), h("span", { class: "qm-lthost", text: where }),
@@ -155,15 +152,17 @@ function catchUpEl(t, info) {
   const res = aiOn() && ai.ready ? aiCache.get(k) : null;
   const box = h("div", { class: "qm-catchup", role: "status" },
     h("span", { text: info.count + " new since you were last here" }),
-    h("button", { type: "button", onclick: () => { const el = $(`#qm-view .qm-msg[data-mid="${CSS.escape(info.first.id)}"]`); if (el) el.scrollIntoView({ behavior: prefersStill() ? "auto" : "smooth", block: "start" }); } }, "Jump to them"),
+    h("button", { type: "button", onclick: () => { const el = $(`#qm-view .qm-msg[data-mid="${CSS.escape(info.first.id)}"]:not(.qm-leaving *)`); if (el) el.scrollIntoView({ behavior: prefersStill() ? "auto" : "smooth", block: "start" }); } }, "Jump to them"),
     aiOn() && ai.ready && !res ? h("button", { type: "button", onclick: (e) => {
       e.currentTarget.disabled = true;
-      const i = t.messages.indexOf(info.first);
+      const i = Math.max(0, t.messages.findIndex((m) => m.id === info.first.id));
+      failedAI.delete(k); // (you asked: now, not after the wait a failure otherwise gets)
       const again = () => { lastThreadSig = ""; invalidate(true); };
       ask(k, { kind: "thread", subject: t.subject, text: threadText({ messages: t.messages.slice(i) }) }, again);
       again();
     } }, pendingAI.has(k) ? "Catching up…" : "Catch me up") : null);
   if (res && res.summary) box.appendChild(h("p", { class: "qm-cusum", text: res.summary }));
+  else if (!res && aiWhy.has(k) && failedAI.has(k)) box.appendChild(h("p", { class: "qm-cusum", text: "Couldn't catch you up: " + String(aiWhy.get(k)).replace(/\.?$/, ".") }));
   return box;
 }
 
@@ -293,7 +292,7 @@ function openFullMsg(m) {
   fill();
   v.appendChild(layer);
   // (it grows out of the message where it sat in the conversation)
-  const src = $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(id))}"] .qm-bubble, #qm-view .qm-msg[data-mid="${CSS.escape(String(id))}"] .qm-bwrap`);
+  const src = $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(id))}"] .qm-bubble:not(.qm-leaving *), #qm-view .qm-msg[data-mid="${CSS.escape(String(id))}"] .qm-bwrap:not(.qm-leaving *)`);
   zoomFrom($(".qm-article", layer), src ? src.getBoundingClientRect() : null, { fadeAt: 0.25 });
   ROOT.classList.remove("qm-mfull-back");
   ROOT.classList.add("qm-mfull-on");
@@ -307,17 +306,18 @@ function closeFullMsg(now) {
   const done = () => {
     f.layer.remove();
     ROOT.classList.remove("qm-mfull-on");
+    if (f.back && f.back.isConnected && f.back !== document.body && !now) f.back.focus({ preventScroll: true }); // (the keyboard back where it was)
     if (now) return;
     // the conversation comes back as it was (the message you opened in view)
     ROOT.classList.add("qm-mfull-back");
     setTimeout(() => ROOT.classList.remove("qm-mfull-back"), 220);
-    const msg = f.mid && $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(f.mid))}"]`);
+    const msg = f.mid && $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(f.mid))}"]:not(.qm-leaving *)`);
     if (msg && msg.getBoundingClientRect().bottom < 80) msg.scrollIntoView({ block: "start" });
   };
   if (now || prefersStill()) { done(); return; }
   // back into its place in the conversation: shown again underneath first (scrolled to it), so there's a place to go
   ROOT.classList.remove("qm-mfull-on");
-  const msg = f.mid && $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(f.mid))}"]`);
+  const msg = f.mid && $(`#qm-view .qm-msg[data-mid="${CSS.escape(String(f.mid))}"]:not(.qm-leaving *)`);
   if (msg && msg.getBoundingClientRect().bottom < 80) msg.scrollIntoView({ block: "start" });
   const src = msg && ($(".qm-bubble", msg) || $(".qm-bwrap", msg));
   const r = src && src.getBoundingClientRect();
@@ -325,6 +325,7 @@ function closeFullMsg(now) {
   play(f.layer, [{ backgroundColor: getComputedStyle(f.layer).backgroundColor }, { backgroundColor: "rgba(0, 0, 0, 0)" }], { ms: 220, easing: "ease-out", fill: "forwards" });
   for (const b of $$(":scope > .qm-bar", f.layer)) play(b, [{ opacity: 1 }, { opacity: 0 }], { ms: 140, easing: "ease-out", fill: "forwards" });
   f.layer.style.pointerEvents = "none";
+  if (f.back && f.back.isConnected && f.back !== document.body) f.back.focus({ preventScroll: true });
   setTimeout(() => f.layer.remove(), a ? 270 * slowMo() : 150);
 }
 
@@ -360,7 +361,7 @@ document.addEventListener("click", (e) => {
   e.stopImmediatePropagation();
   const m = pictureMessage(img);
   const pics = $$("img", box).filter((x) => !x.closest("a[href]") && isPicture(x));
-  const items = pics.map((x) => pictureItem(x, m));
+  const items = pics.map((x, i) => Object.assign(pictureItem(x, m), { key: "pic:" + i + ":" + (x.currentSrc || x.src) }));
   viewFile(items[Math.max(0, pics.indexOf(img))], items, img);
 }, true);
 // (the pointer says so: a magnifier over a picture that opens)

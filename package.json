@@ -1,6 +1,6 @@
 {
   "name": "umbra-mail",
-  "version": "1.24.5",
+  "version": "1.25.6",
   "private": true,
   "description": "Umbra Mail: a calm Gmail, as a userscript and a Chrome extension.",
   "license": "GPL-3.0-only",

@@ -25,6 +25,21 @@ const wrap = (more) => `(function () {
 const VERSION = ${JSON.stringify(pkg.version)};
 // on Umbra's own website: only say that it's installed (the site then opens Gmail, where the welcome plays)
 if (location.hostname === "umbra.masn.studio") { document.documentElement.setAttribute("data-umbra-installed", VERSION); return; }
+// a link that opens Gmail's own full-page "new message", already addressed (an address on a website, a mailto: link):
+// Umbra opens your inbox instead, with that message in a window, filled in (Settings › Writing can leave it to Gmail)
+if (/[?&](view=cm|tf=cm|extsrc=mailto)(&|$)/.test(location.search) && !window.opener && window.top === window) {
+  try {
+    const d = composeLink("https://mail.google.com" + location.pathname + location.search);
+    const prefs = (typeof GM_getValue === "function" ? GM_getValue("prefs3", null) : null) || {};
+    if (d && (prefs.write || {}).linkCompose !== false) {
+      sessionStorage.setItem("qm-link-compose", JSON.stringify(Object.assign(d, { link: true, at: Date.now() })));
+      // (the plain inbox: Umbra opens the one window itself, once Gmail is up; asked for by the address as well, Gmail
+      // would open a second, empty one, late)
+      location.replace(d.u != null ? "/mail/u/" + d.u + "/#inbox" : d.email ? "/mail/?authuser=" + encodeURIComponent(d.email) + "#inbox" : "/mail/u/0/#inbox");
+      return;
+    }
+  } catch (e) { /* as Gmail draws it */ }
+}
 // Gmail's print, attachment and pop-out pages (…?view=…) are left exactly as Gmail draws them
 if (/[?&]view=/.test(location.search)) return;
 const UMBRA_CSS = ${JSON.stringify(css)};
